@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import Image from 'next/image';
 import { motion } from 'framer-motion';
 import {
     LayoutDashboard, Scissors, Users, Calendar, LogOut,
@@ -102,8 +103,8 @@ export default function AdminDashboard() {
             <header className="sticky top-0 z-40 bg-white dark:bg-velvet-dark border-b border-beige-200 dark:border-velvet-gray">
                 <div className="flex items-center justify-between px-4 py-3 max-w-6xl mx-auto">
                     <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-full bg-gradient-to-br from-gold to-gold-dark flex items-center justify-center">
-                            <Scissors className="w-5 h-5 text-velvet-black" />
+                        <div className="relative w-10 h-10 rounded-full overflow-hidden border-2 border-velvet-rose/20">
+                            <Image src="/logo.jpg" alt="Velvet Family Salon" fill className="object-cover" priority />
                         </div>
                         <div>
                             <h1 className="font-display text-lg font-semibold">Admin Panel</h1>

@@ -68,8 +68,8 @@ export default function HomePage() {
             <header className="sticky top-0 z-40 glass border-b border-[var(--card-border)]">
                 <div className="flex items-center justify-between px-4 py-3 max-w-lg mx-auto">
                     <div className="flex items-center gap-3">
-                        <div className="relative w-14 h-14 rounded-full overflow-hidden border-2 border-velvet-rose/20">
-                            <Image src="/logo_hq.png" alt="Velvet Family Salon" fill className="object-cover scale-125" priority />
+                        <div className="relative w-12 h-12 rounded-full overflow-hidden border-2 border-velvet-rose/20 shadow-md">
+                            <Image src="/logo.jpg" alt="Velvet Family Salon" fill className="object-cover" priority />
                         </div>
                         <div>
                             <h1 className="font-display text-lg font-semibold leading-tight">Velvet</h1>

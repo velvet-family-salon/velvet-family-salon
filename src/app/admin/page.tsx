@@ -2,7 +2,8 @@
 
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { Eye, EyeOff, Scissors, Lock, LogIn } from 'lucide-react';
+import { Eye, EyeOff, Lock, LogIn } from 'lucide-react';
+import Image from 'next/image';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 
@@ -38,8 +39,8 @@ export default function AdminLoginPage() {
             >
                 {/* Logo */}
                 <div className="text-center mb-8">
-                    <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-gradient-to-br from-gold to-gold-dark flex items-center justify-center">
-                        <Scissors className="w-8 h-8 text-velvet-black" />
+                    <div className="relative w-20 h-20 mx-auto mb-4 rounded-2xl overflow-hidden shadow-lg border-2 border-velvet-rose/30">
+                        <Image src="/logo.jpg" alt="Velvet Family Salon" fill className="object-cover" priority />
                     </div>
                     <h1 className="font-display text-2xl font-bold text-white">Admin Portal</h1>
                     <p className="text-beige-400 text-sm">Velvet Family Salon</p>

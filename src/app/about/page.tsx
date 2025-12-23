@@ -1,6 +1,7 @@
 'use client';
 
 import { motion } from 'framer-motion';
+import Image from 'next/image';
 import { ArrowLeft, Scissors, Star, Heart, Award, Users } from 'lucide-react';
 import Link from 'next/link';
 
@@ -24,8 +25,8 @@ export default function AboutPage() {
                     animate={{ opacity: 1, y: 0 }}
                     className="text-center"
                 >
-                    <div className="w-20 h-20 mx-auto mb-4 rounded-full bg-gradient-to-br from-gold to-gold-dark flex items-center justify-center">
-                        <Scissors className="w-10 h-10 text-velvet-black" />
+                    <div className="relative w-24 h-24 mx-auto mb-4 rounded-2xl overflow-hidden shadow-lg border-2 border-velvet-rose/20">
+                        <Image src="/logo.jpg" alt="Velvet Family Salon" fill className="object-cover" priority />
                     </div>
                     <h2 className="font-display text-3xl font-bold mb-2">
                         Velvet <span className="gradient-text">Family Salon</span>
