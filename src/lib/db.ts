@@ -397,6 +397,19 @@ export async function deleteService(id: string): Promise<boolean> {
 
 // ==================== ADMIN STAFF CRUD ====================
 
+export async function createStaff(staff: Partial<Staff>): Promise<boolean> {
+    const { error } = await supabase
+        .from('staff')
+        .insert(staff);
+
+    if (error) {
+        console.error('Error creating staff:', error);
+        return false;
+    }
+
+    return true;
+}
+
 export async function updateStaff(id: string, updates: Partial<Staff>): Promise<boolean> {
     const { error } = await supabase
         .from('staff')

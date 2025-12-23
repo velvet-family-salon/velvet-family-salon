@@ -3,12 +3,13 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import {
     LayoutDashboard, Scissors, Users, Calendar, ArrowLeft,
-    Search, Plus, Edit2, Trash2, ToggleLeft, ToggleRight, Loader2, MessageSquare, Settings
+    Search, Plus, Edit2, Trash2, ToggleLeft, ToggleRight, Loader2, MessageSquare, Settings,
+    X, Save
 } from 'lucide-react';
-import { getAllStaff, updateStaff, deleteStaff } from '@/lib/db';
+import { getAllStaff, updateStaff, deleteStaff, createStaff } from '@/lib/db';
 import { Staff } from '@/lib/types';
 
 export default function AdminStaffPage() {
@@ -16,6 +17,25 @@ export default function AdminStaffPage() {
     const [staff, setStaff] = useState<Staff[]>([]);
     const [loading, setLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState('');
+    const [showModal, setShowModal] = useState(false);
+    const [editingId, setEditingId] = useState<string | null>(null);
+    const [saving, setSaving] = useState(false);
+
+    // Form state
+    const [formData, setFormData] = useState({
+        name: '',
+        role: '',
+        is_active: true,
+        working_hours: {
+            monday: { start: '09:00', end: '21:00', isOff: false },
+            tuesday: { start: '09:00', end: '21:00', isOff: false },
+            wednesday: { start: '09:00', end: '21:00', isOff: false },
+            thursday: { start: '09:00', end: '21:00', isOff: false },
+            friday: { start: '09:00', end: '21:00', isOff: false },
+            saturday: { start: '09:00', end: '21:00', isOff: false },
+            sunday: { start: '09:00', end: '21:00', isOff: true },
+        } as Record<string, { start: string; end: string; isOff: boolean }>,
+    });
 
     useEffect(() => {
         const isLoggedIn = localStorage.getItem('adminLoggedIn');
@@ -55,6 +75,86 @@ export default function AdminStaffPage() {
         }
     };
 
+    function openAddModal() {
+        setEditingId(null);
+        setFormData({
+            name: '',
+            role: '',
+            is_active: true,
+            working_hours: {
+                monday: { start: '09:00', end: '21:00', isOff: false },
+                tuesday: { start: '09:00', end: '21:00', isOff: false },
+                wednesday: { start: '09:00', end: '21:00', isOff: false },
+                thursday: { start: '09:00', end: '21:00', isOff: false },
+                friday: { start: '09:00', end: '21:00', isOff: false },
+                saturday: { start: '09:00', end: '21:00', isOff: false },
+                sunday: { start: '09:00', end: '21:00', isOff: true },
+            },
+        });
+        setShowModal(true);
+    }
+
+    function openEditModal(member: Staff) {
+        setEditingId(member.id);
+        setFormData({
+            name: member.name,
+            role: member.role,
+            is_active: member.is_active,
+            working_hours: member.working_hours || {
+                monday: { start: '09:00', end: '21:00', isOff: false },
+                tuesday: { start: '09:00', end: '21:00', isOff: false },
+                wednesday: { start: '09:00', end: '21:00', isOff: false },
+                thursday: { start: '09:00', end: '21:00', isOff: false },
+                friday: { start: '09:00', end: '21:00', isOff: false },
+                saturday: { start: '09:00', end: '21:00', isOff: false },
+                sunday: { start: '09:00', end: '21:00', isOff: true },
+            },
+        });
+        setShowModal(true);
+    }
+
+    async function handleSubmit(e: React.FormEvent) {
+        e.preventDefault();
+        setSaving(true);
+
+        const staffData = {
+            name: formData.name,
+            role: formData.role,
+            is_active: formData.is_active,
+            working_hours: formData.working_hours,
+        };
+
+        if (editingId) {
+            const success = await updateStaff(editingId, staffData);
+            if (success) {
+                setStaff(staff.map(s =>
+                    s.id === editingId ? { ...s, ...staffData } : s
+                ));
+            }
+        } else {
+            const success = await createStaff(staffData);
+            if (success) {
+                loadStaff();
+            }
+        }
+
+        setSaving(false);
+        setShowModal(false);
+    }
+
+    function toggleWorkingDay(day: string) {
+        setFormData({
+            ...formData,
+            working_hours: {
+                ...formData.working_hours,
+                [day]: {
+                    ...formData.working_hours[day],
+                    isOff: !formData.working_hours[day].isOff,
+                },
+            },
+        });
+    }
+
     const navItems = [
         { icon: LayoutDashboard, label: 'Dashboard', href: '/admin/dashboard' },
         { icon: Calendar, label: 'Bookings', href: '/admin/bookings' },
@@ -83,7 +183,7 @@ export default function AdminStaffPage() {
                         </Link>
                         <h1 className="font-display text-xl font-semibold">Manage Staff</h1>
                     </div>
-                    <button className="btn-primary text-sm py-2">
+                    <button onClick={openAddModal} className="btn-primary text-sm py-2">
                         <Plus className="w-4 h-4" />
                         Add Staff
                     </button>
@@ -168,7 +268,9 @@ export default function AdminStaffPage() {
                                         <p className="text-xs text-[var(--muted)] mb-2">Working Days</p>
                                         <div className="flex gap-1">
                                             {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((day) => {
-                                                const isWorking = member.working_hours?.[day.toLowerCase()];
+                                                const dayKey = day.toLowerCase();
+                                                const dayData = member.working_hours?.[dayKey];
+                                                const isWorking = dayData && !dayData.isOff;
                                                 return (
                                                     <span
                                                         key={day}
@@ -196,7 +298,10 @@ export default function AdminStaffPage() {
                                     >
                                         {member.is_active ? <ToggleRight className="w-5 h-5" /> : <ToggleLeft className="w-5 h-5" />}
                                     </button>
-                                    <button className="p-2 bg-blue-500/10 text-blue-600 rounded-lg hover:bg-blue-500/20 transition-colors">
+                                    <button
+                                        onClick={() => openEditModal(member)}
+                                        className="p-2 bg-blue-500/10 text-blue-600 rounded-lg hover:bg-blue-500/20 transition-colors"
+                                    >
                                         <Edit2 className="w-4 h-4" />
                                     </button>
                                     <button
@@ -237,6 +342,124 @@ export default function AdminStaffPage() {
                     })}
                 </div>
             </nav>
+
+            {/* Add/Edit Staff Modal */}
+            <AnimatePresence>
+                {showModal && (
+                    <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50"
+                        onClick={() => setShowModal(false)}
+                    >
+                        <motion.div
+                            initial={{ scale: 0.95, opacity: 0 }}
+                            animate={{ scale: 1, opacity: 1 }}
+                            exit={{ scale: 0.95, opacity: 0 }}
+                            className="bg-white dark:bg-velvet-dark rounded-2xl shadow-xl w-full max-w-md max-h-[90vh] overflow-y-auto"
+                            onClick={(e) => e.stopPropagation()}
+                        >
+                            <div className="flex items-center justify-between p-4 border-b border-beige-200 dark:border-velvet-gray">
+                                <h2 className="font-display text-lg font-semibold">
+                                    {editingId ? 'Edit Staff' : 'Add Staff'}
+                                </h2>
+                                <button
+                                    onClick={() => setShowModal(false)}
+                                    className="p-2 hover:bg-beige-100 dark:hover:bg-velvet-gray rounded-full transition-colors"
+                                >
+                                    <X className="w-5 h-5" />
+                                </button>
+                            </div>
+
+                            <form onSubmit={handleSubmit} className="p-4 space-y-4">
+                                <div>
+                                    <label className="block text-sm font-medium mb-1">Name *</label>
+                                    <input
+                                        type="text"
+                                        value={formData.name}
+                                        onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                                        className="input-field"
+                                        required
+                                        placeholder="e.g., John Doe"
+                                    />
+                                </div>
+
+                                <div>
+                                    <label className="block text-sm font-medium mb-1">Role *</label>
+                                    <input
+                                        type="text"
+                                        value={formData.role}
+                                        onChange={(e) => setFormData({ ...formData, role: e.target.value })}
+                                        className="input-field"
+                                        required
+                                        placeholder="e.g., Senior Stylist"
+                                    />
+                                </div>
+
+                                <div>
+                                    <label className="block text-sm font-medium mb-2">Working Days</label>
+                                    <div className="flex flex-wrap gap-2">
+                                        {['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'].map((day) => (
+                                            <button
+                                                key={day}
+                                                type="button"
+                                                onClick={() => toggleWorkingDay(day)}
+                                                className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${!formData.working_hours[day]?.isOff
+                                                    ? 'bg-gold/20 text-gold border border-gold/30'
+                                                    : 'bg-gray-100 dark:bg-velvet-gray text-gray-500 border border-transparent'
+                                                    }`}
+                                            >
+                                                {day.charAt(0).toUpperCase() + day.slice(1, 3)}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                <div className="flex items-center gap-2">
+                                    <button
+                                        type="button"
+                                        onClick={() => setFormData({ ...formData, is_active: !formData.is_active })}
+                                        className={`p-2 rounded-lg transition-colors ${formData.is_active
+                                            ? 'bg-green-500/10 text-green-600'
+                                            : 'bg-gray-500/10 text-gray-500'
+                                            }`}
+                                    >
+                                        {formData.is_active ? <ToggleRight className="w-5 h-5" /> : <ToggleLeft className="w-5 h-5" />}
+                                    </button>
+                                    <span className="text-sm">
+                                        {formData.is_active ? 'Available for bookings' : 'Unavailable'}
+                                    </span>
+                                </div>
+
+                                <div className="flex gap-3 pt-4">
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowModal(false)}
+                                        className="flex-1 btn-secondary"
+                                    >
+                                        Cancel
+                                    </button>
+                                    <button
+                                        type="submit"
+                                        disabled={saving}
+                                        className="flex-1 btn-primary"
+                                    >
+                                        {saving ? (
+                                            <Loader2 className="w-4 h-4 animate-spin" />
+                                        ) : (
+                                            <>
+                                                <Save className="w-4 h-4" />
+                                                {editingId ? 'Update' : 'Add Staff'}
+                                            </>
+                                        )}
+                                    </button>
+                                </div>
+                            </form>
+                        </motion.div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
         </div>
     );
 }
