@@ -1,13 +1,13 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import Link from 'next/link';
 import Image from 'next/image';
-import { Scissors, Star, Clock, MapPin, Phone, MessageCircle, ChevronRight, Sparkles, Loader2 } from 'lucide-react';
+import { Scissors, Star, Clock, MapPin, Phone, MessageCircle, ChevronRight, Sparkles, Loader2, ChevronLeft } from 'lucide-react';
 import { formatPrice, SALON_CONFIG, getWhatsAppLink, getCallLink } from '@/lib/utils';
-import { getServices, getReviewsConfig } from '@/lib/db';
-import { Service, ReviewsConfig } from '@/lib/types';
+import { getServices, getReviewsConfig, getStaff } from '@/lib/db';
+import { Service, ReviewsConfig, Staff } from '@/lib/types';
 import { ServiceCard } from '@/components/ui/ServiceCard';
 import { QuickActions } from '@/components/ui/QuickActions';
 import { ReviewsSection } from '@/components/ui/ReviewsSection';
@@ -31,21 +31,36 @@ const staggerContainer = {
 export default function HomePage() {
     const { theme, toggleTheme } = useTheme();
     const [services, setServices] = useState<Service[]>([]);
+    const [staff, setStaff] = useState<Staff[]>([]);
     const [reviewsConfig, setReviewsConfig] = useState<ReviewsConfig | null>(null);
     const [loading, setLoading] = useState(true);
+    const [staffIndex, setStaffIndex] = useState(0);
 
     useEffect(() => {
         async function loadData() {
-            const [servicesData, configData] = await Promise.all([
+            const [servicesData, configData, staffData] = await Promise.all([
                 getServices(),
                 getReviewsConfig(),
+                getStaff(),
             ]);
             setServices(servicesData.slice(0, 4)); // Get first 4 for featured
             setReviewsConfig(configData);
+            setStaff(staffData.filter(s => s.is_active)); // Only active staff
             setLoading(false);
         }
         loadData();
     }, []);
+
+    // Auto-slide staff
+    useEffect(() => {
+        if (staff.length <= 1) return;
+        const interval = setInterval(() => {
+            setStaffIndex((prev) => (prev + 1) % staff.length);
+        }, 4000);
+        return () => clearInterval(interval);
+    }, [staff.length]);
+
+    const currentStaff = staff[staffIndex];
 
     return (
         <div className="min-h-screen">
@@ -201,6 +216,86 @@ export default function HomePage() {
                     ))}
                 </div>
             </section>
+
+            {/* Meet Our Stylists */}
+            {staff.length > 0 && currentStaff && (
+                <section className="px-4 py-6 max-w-lg mx-auto">
+                    <h3 className="font-display text-xl font-semibold mb-4 text-center">Meet Our Stylists</h3>
+
+                    {/* Slideshow Card */}
+                    <div className="card p-4">
+                        <AnimatePresence mode="wait">
+                            <motion.div
+                                key={staffIndex}
+                                initial={{ opacity: 0, x: 20 }}
+                                animate={{ opacity: 1, x: 0 }}
+                                exit={{ opacity: 0, x: -20 }}
+                                transition={{ duration: 0.3 }}
+                                className="flex gap-4 items-center"
+                            >
+                                {/* Profile Image - Rounded Rectangle */}
+                                <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-velvet-rose/20 to-gold/20 overflow-hidden flex-shrink-0 border-2 border-beige-200 dark:border-velvet-gray shadow-md">
+                                    {currentStaff.avatar_url ? (
+                                        <img
+                                            src={currentStaff.avatar_url}
+                                            alt={currentStaff.name}
+                                            className="w-full h-full object-cover"
+                                        />
+                                    ) : (
+                                        <div className="w-full h-full flex items-center justify-center">
+                                            <span className="text-3xl opacity-50">👤</span>
+                                        </div>
+                                    )}
+                                </div>
+
+                                {/* Info */}
+                                <div className="flex-1 min-w-0">
+                                    <div className="flex items-center gap-2 mb-1">
+                                        <span className="w-2 h-2 bg-green-500 rounded-full" />
+                                        <span className="text-xs text-green-600 font-medium">Available</span>
+                                    </div>
+                                    <h4 className="font-semibold text-lg leading-tight truncate">{currentStaff.name}</h4>
+                                    <p className="text-velvet-rose text-sm font-medium">{currentStaff.role}</p>
+                                    <div className="flex items-center gap-1 mt-1">
+                                        <Star className="w-3.5 h-3.5 text-gold fill-gold" />
+                                        <span className="text-xs text-[var(--muted)]">5+ Years Experience</span>
+                                    </div>
+                                </div>
+                            </motion.div>
+                        </AnimatePresence>
+                    </div>
+
+                    {/* Navigation */}
+                    {staff.length > 1 && (
+                        <div className="flex items-center justify-center gap-4 mt-4">
+                            <button
+                                onClick={() => setStaffIndex((prev) => (prev - 1 + staff.length) % staff.length)}
+                                className="w-10 h-10 rounded-full bg-white dark:bg-velvet-dark shadow-md border border-[var(--card-border)] flex items-center justify-center hover:bg-gray-50 dark:hover:bg-velvet-gray transition-colors"
+                            >
+                                <ChevronLeft className="w-5 h-5" />
+                            </button>
+
+                            {/* Dots */}
+                            <div className="flex gap-2">
+                                {staff.map((_, i) => (
+                                    <button
+                                        key={i}
+                                        onClick={() => setStaffIndex(i)}
+                                        className={`h-2 rounded-full transition-all duration-300 ${i === staffIndex ? 'bg-velvet-rose w-6' : 'bg-[var(--muted)]/30 hover:bg-[var(--muted)]/50 w-2'}`}
+                                    />
+                                ))}
+                            </div>
+
+                            <button
+                                onClick={() => setStaffIndex((prev) => (prev + 1) % staff.length)}
+                                className="w-10 h-10 rounded-full bg-white dark:bg-velvet-dark shadow-md border border-[var(--card-border)] flex items-center justify-center hover:bg-gray-50 dark:hover:bg-velvet-gray transition-colors"
+                            >
+                                <ChevronRight className="w-5 h-5" />
+                            </button>
+                        </div>
+                    )}
+                </section>
+            )}
 
             {/* Google Reviews */}
             <ReviewsSection />

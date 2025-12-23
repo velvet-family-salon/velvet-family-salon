@@ -7,9 +7,9 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
     LayoutDashboard, Scissors, Users, Calendar, ArrowLeft,
     Search, Plus, Edit2, Trash2, ToggleLeft, ToggleRight, Loader2, MessageSquare, Settings,
-    X, Save
+    X, Save, Camera
 } from 'lucide-react';
-import { getAllStaff, updateStaff, deleteStaff, createStaff } from '@/lib/db';
+import { getAllStaff, updateStaff, deleteStaff, createStaff, uploadStaffImage } from '@/lib/db';
 import { Staff } from '@/lib/types';
 
 export default function AdminStaffPage() {
@@ -20,6 +20,7 @@ export default function AdminStaffPage() {
     const [showModal, setShowModal] = useState(false);
     const [editingId, setEditingId] = useState<string | null>(null);
     const [saving, setSaving] = useState(false);
+    const [uploading, setUploading] = useState(false);
 
     // Form state
     const [formData, setFormData] = useState({
@@ -35,6 +36,7 @@ export default function AdminStaffPage() {
             saturday: { start: '09:00', end: '21:00', isOff: false },
             sunday: { start: '09:00', end: '21:00', isOff: true },
         } as Record<string, { start: string; end: string; isOff: boolean }>,
+        avatar_url: '',
     });
 
     useEffect(() => {
@@ -53,9 +55,13 @@ export default function AdminStaffPage() {
         setLoading(false);
     }
 
-    const filteredStaff = staff.filter((member) =>
-        member.name.toLowerCase().includes(searchQuery.toLowerCase())
-    );
+    const filteredStaff = staff
+        .filter((member) => member.name.toLowerCase().includes(searchQuery.toLowerCase()))
+        .sort((a, b) => {
+            // Sort active first, then by name
+            if (a.is_active === b.is_active) return a.name.localeCompare(b.name);
+            return a.is_active ? -1 : 1;
+        });
 
     const handleToggleActive = async (id: string, currentStatus: boolean) => {
         const success = await updateStaff(id, { is_active: !currentStatus });
@@ -90,6 +96,7 @@ export default function AdminStaffPage() {
                 saturday: { start: '09:00', end: '21:00', isOff: false },
                 sunday: { start: '09:00', end: '21:00', isOff: true },
             },
+            avatar_url: '',
         });
         setShowModal(true);
     }
@@ -109,9 +116,24 @@ export default function AdminStaffPage() {
                 saturday: { start: '09:00', end: '21:00', isOff: false },
                 sunday: { start: '09:00', end: '21:00', isOff: true },
             },
+            avatar_url: member.avatar_url || '',
         });
         setShowModal(true);
     }
+
+    const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        setUploading(true);
+        const url = await uploadStaffImage(file);
+        if (url) {
+            setFormData({ ...formData, avatar_url: url });
+        } else {
+            alert('Failed to upload image. Please check Supabase storage settings.');
+        }
+        setUploading(false);
+    };
 
     async function handleSubmit(e: React.FormEvent) {
         e.preventDefault();
@@ -122,6 +144,7 @@ export default function AdminStaffPage() {
             role: formData.role,
             is_active: formData.is_active,
             working_hours: formData.working_hours,
+            avatar_url: formData.avatar_url || null,
         };
 
         if (editingId) {
@@ -243,21 +266,34 @@ export default function AdminStaffPage() {
                                 initial={{ opacity: 0, y: 20 }}
                                 animate={{ opacity: 1, y: 0 }}
                                 transition={{ delay: index * 0.05 }}
-                                className={`bg-white dark:bg-velvet-dark rounded-2xl border border-beige-200 dark:border-velvet-gray p-4 ${!member.is_active ? 'opacity-60' : ''
-                                    }`}
+                                className={`bg-white dark:bg-velvet-dark rounded-2xl border-2 ${member.is_active ? 'border-green-200 dark:border-green-900' : 'border-beige-200 dark:border-velvet-gray'} p-5 shadow-sm hover:shadow-md transition-shadow ${!member.is_active ? 'opacity-70' : ''}`}
                             >
                                 <div className="flex items-center gap-4">
-                                    <div className="w-16 h-16 rounded-full bg-gradient-to-br from-beige-200 to-beige-300 dark:from-velvet-dark dark:to-velvet-gray flex items-center justify-center">
-                                        <span className="text-3xl">👤</span>
+                                    <div className="relative">
+                                        <div className="w-20 h-20 rounded-full bg-gradient-to-br from-velvet-rose/20 to-gold/20 flex items-center justify-center overflow-hidden border-3 border-white dark:border-velvet-dark shadow-lg">
+                                            {member.avatar_url ? (
+                                                <img
+                                                    src={member.avatar_url}
+                                                    alt={member.name}
+                                                    className="w-full h-full object-cover"
+                                                    onError={(e) => {
+                                                        const target = e.target as HTMLImageElement;
+                                                        target.style.display = 'none';
+                                                    }}
+                                                />
+                                            ) : (
+                                                <span className="text-4xl">👤</span>
+                                            )}
+                                        </div>
+                                        {member.is_active && (
+                                            <span className="absolute bottom-0 right-0 w-5 h-5 bg-green-500 rounded-full border-2 border-white dark:border-velvet-dark" />
+                                        )}
                                     </div>
                                     <div className="flex-1">
                                         <h3 className="font-semibold text-lg">{member.name}</h3>
-                                        <p className="text-sm text-[var(--muted)]">{member.role}</p>
-                                        <span className={`inline-flex items-center gap-1 text-xs mt-1 ${member.is_active ? 'text-green-600' : 'text-gray-500'
-                                            }`}>
-                                            <span className={`w-2 h-2 rounded-full ${member.is_active ? 'bg-green-500' : 'bg-gray-400'
-                                                }`} />
-                                            {member.is_active ? 'Available' : 'Unavailable'}
+                                        <p className="text-sm text-velvet-rose font-medium">{member.role}</p>
+                                        <span className={`inline-flex items-center gap-1 text-xs mt-1 px-2 py-0.5 rounded-full ${member.is_active ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' : 'bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400'}`}>
+                                            {member.is_active ? '✓ Available' : 'Unavailable'}
                                         </span>
                                     </div>
                                 </div>
@@ -373,6 +409,33 @@ export default function AdminStaffPage() {
                             </div>
 
                             <form onSubmit={handleSubmit} className="p-4 space-y-4">
+                                {/* Profile Picture */}
+                                <div className="flex flex-col items-center gap-3">
+                                    <div className="relative">
+                                        <div className="w-24 h-24 rounded-full bg-gradient-to-br from-velvet-rose/20 to-gold/20 flex items-center justify-center overflow-hidden border-4 border-beige-100 dark:border-velvet-gray shadow-lg">
+                                            {formData.avatar_url ? (
+                                                <img src={formData.avatar_url} alt="Preview" className="w-full h-full object-cover" />
+                                            ) : (
+                                                <span className="text-4xl">👤</span>
+                                            )}
+                                        </div>
+                                        <label
+                                            htmlFor="avatar-upload"
+                                            className="absolute bottom-0 right-0 p-2 bg-velvet-rose text-white rounded-full cursor-pointer shadow-lg hover:bg-velvet-rose/90 transition-colors"
+                                        >
+                                            {uploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Camera className="w-4 h-4" />}
+                                        </label>
+                                        <input
+                                            type="file"
+                                            accept="image/*"
+                                            onChange={handleImageUpload}
+                                            className="hidden"
+                                            id="avatar-upload"
+                                        />
+                                    </div>
+                                    <p className="text-xs text-[var(--muted)]">Click the camera to upload a photo</p>
+                                </div>
+
                                 <div>
                                     <label className="block text-sm font-medium mb-1">Name *</label>
                                     <input

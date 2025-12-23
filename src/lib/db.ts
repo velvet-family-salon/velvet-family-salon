@@ -410,6 +410,27 @@ export async function createStaff(staff: Partial<Staff>): Promise<boolean> {
     return true;
 }
 
+export async function uploadStaffImage(file: File): Promise<string | null> {
+    const fileExt = file.name.split('.').pop();
+    const fileName = `staff-${Math.random().toString(36).substring(2)}-${Date.now()}.${fileExt}`;
+    const filePath = `${fileName}`;
+
+    const { error: uploadError } = await supabase.storage
+        .from('service-images')
+        .upload(filePath, file);
+
+    if (uploadError) {
+        console.error('Error uploading staff image:', uploadError);
+        return null;
+    }
+
+    const { data: { publicUrl } } = supabase.storage
+        .from('service-images')
+        .getPublicUrl(filePath);
+
+    return publicUrl;
+}
+
 export async function updateStaff(id: string, updates: Partial<Staff>): Promise<boolean> {
     const { error } = await supabase
         .from('staff')
