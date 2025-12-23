@@ -1,0 +1,137 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Custom CSS Variables for theming */
+:root {
+  --background: #fdfcfa;
+  --foreground: #1a1a1a;
+  --card-bg: #ffffff;
+  --card-border: #ebe3d5;
+  --muted: #4a4a4a;
+  --accent: #C4767C;
+  --accent-hover: #A85A60;
+  --accent-light: #F5E1E4;
+}
+
+.dark {
+  --background: #1a1a1a;
+  --foreground: #f5f0e8;
+  --card-bg: #2d2d2d;
+  --card-border: #4a4a4a;
+  --muted: #c9b99a;
+  --accent: #C4767C;
+  --accent-hover: #E89CA2;
+  --accent-light: #3D2A2C;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-feature-settings: "rlig" 1, "calt" 1;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Hide scrollbar for mobile app feel */
+.hide-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.hide-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+/* Custom scrollbar for desktop */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--card-border);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--muted);
+}
+
+/* Touch-friendly button styles */
+@layer components {
+  .btn-primary {
+    @apply bg-velvet-rose text-white font-semibold py-3 px-6 rounded-xl transition-all duration-300 ease-out hover:bg-velvet-rose-dark hover:shadow-lg hover:shadow-velvet-rose/30 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2;
+  }
+
+  .btn-secondary {
+    @apply bg-transparent border-2 border-velvet-rose text-velvet-rose font-semibold py-3 px-6 rounded-xl transition-all duration-300 ease-out hover:bg-velvet-rose hover:text-white active:scale-95;
+  }
+
+  .btn-ghost {
+    @apply bg-transparent font-medium py-3 px-6 rounded-xl transition-all duration-200 hover:bg-beige-100 dark:hover:bg-velvet-dark active:scale-95;
+    color: var(--foreground);
+  }
+
+  .card {
+    @apply bg-[var(--card-bg)] border border-[var(--card-border)] rounded-2xl shadow-sm transition-all duration-300 hover:shadow-md hover:border-velvet-rose/30;
+  }
+
+  .input-field {
+    @apply w-full bg-[var(--card-bg)] border border-[var(--card-border)] rounded-xl py-3 px-4 text-[var(--foreground)] placeholder:text-[var(--muted)] focus:outline-none focus:ring-2 focus:ring-velvet-rose/50 focus:border-velvet-rose transition-all duration-200;
+  }
+
+  .glass {
+    @apply bg-white/80 dark:bg-velvet-black/80 backdrop-blur-lg;
+  }
+}
+
+/* Gradient text effect */
+.gradient-text {
+  background: linear-gradient(135deg, #C4767C 0%, #F5E1E4 50%, #C4767C 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Shimmer effect for loading states */
+.shimmer {
+  background: linear-gradient(90deg, transparent, rgba(212, 175, 55, 0.1), transparent);
+  background-size: 200% 100%;
+  animation: shimmer 2s infinite;
+}
+
+/* Bottom navigation safe area */
+.pb-safe {
+  padding-bottom: calc(80px + env(safe-area-inset-bottom, 0px));
+}
+
+/* Mobile touch optimization */
+@media (hover: none) and (pointer: coarse) {
+
+  .btn-primary:hover,
+  .btn-secondary:hover,
+  .card:hover {
+    transform: none;
+  }
+}
+
+/* Page transition wrapper */
+.page-enter {
+  opacity: 0;
+  transform: translateY(10px);
+}
+
+.page-enter-active {
+  opacity: 1;
+  transform: translateY(0);
+  transition: opacity 300ms ease-out, transform 300ms ease-out;
+}
