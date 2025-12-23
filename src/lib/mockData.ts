@@ -190,6 +190,8 @@ export const mockAppointments: Appointment[] = [
         end_time: '10:30',
         status: 'confirmed',
         notes: null,
+        final_amount: null,
+        payment_mode: null,
         created_at: new Date().toISOString(),
     },
     {
@@ -202,6 +204,8 @@ export const mockAppointments: Appointment[] = [
         end_time: '15:00',
         status: 'pending',
         notes: null,
+        final_amount: null,
+        payment_mode: null,
         created_at: new Date().toISOString(),
     },
 ];
