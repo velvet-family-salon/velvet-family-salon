@@ -35,6 +35,35 @@ export default function HomePage() {
     const [reviewsConfig, setReviewsConfig] = useState<ReviewsConfig | null>(null);
     const [loading, setLoading] = useState(true);
     const [staffIndex, setStaffIndex] = useState(0);
+    const [taglineIndex, setTaglineIndex] = useState(0);
+    const [heroImageIndex, setHeroImageIndex] = useState(0);
+
+    // Hero background images
+    const heroImages = [
+        '/images/hero/hero-1.png',
+        '/images/hero/hero-2.png',
+        '/images/hero/hero-3.png',
+        '/images/hero/hero-4.png',
+        '/images/hero/hero-5.png',
+        '/images/hero/hero-6.png',
+        '/images/hero/hero-7.png',
+        '/images/hero/hero-8.png',
+        '/images/hero/hero-9.png',
+        '/images/hero/hero-10.png',
+        '/images/hero/hero-11.png',
+        '/images/hero/hero-12.png',
+        '/images/hero/hero-13.png',
+        '/images/hero/hero-14.png',
+    ];
+
+    // Rotating taglines
+    const taglines = [
+        "Your family's complete grooming destination. Expert stylists, premium services.",
+        "Where beauty meets perfection. Experience the Velvet difference today.",
+        "Transform your look with our skilled stylists. Book your appointment now!",
+        "Premium styling for the whole family. Men, Women & Kids welcome.",
+        "Professional hair coloring & styling by certified experts.",
+    ];
 
     useEffect(() => {
         async function loadData() {
@@ -59,6 +88,15 @@ export default function HomePage() {
         }, 4000);
         return () => clearInterval(interval);
     }, [staff.length]);
+
+    // Auto-rotate taglines and hero images together
+    useEffect(() => {
+        const interval = setInterval(() => {
+            setTaglineIndex((prev) => (prev + 1) % taglines.length);
+            setHeroImageIndex((prev) => (prev + 1) % heroImages.length);
+        }, 4000);
+        return () => clearInterval(interval);
+    }, [taglines.length, heroImages.length]);
 
     const currentStaff = staff[staffIndex];
 
@@ -91,15 +129,40 @@ export default function HomePage() {
             </header>
 
             {/* Hero Section */}
-            <section className="relative overflow-hidden">
-                <div className="absolute inset-0 bg-gradient-to-br from-velvet-black via-velvet-dark to-velvet-black" />
-                <div className="absolute inset-0 opacity-30">
+            <section className="relative overflow-hidden min-h-[400px]">
+                {/* Background Image Carousel */}
+                <AnimatePresence mode="wait">
+                    <motion.div
+                        key={heroImageIndex}
+                        initial={{ opacity: 0, scale: 1.1 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        exit={{ opacity: 0 }}
+                        transition={{ duration: 1, ease: "easeInOut" }}
+                        className="absolute inset-0"
+                    >
+                        <Image
+                            src={heroImages[heroImageIndex]}
+                            alt="Velvet Family Salon"
+                            fill
+                            className="object-cover"
+                            sizes="100vw"
+                            quality={75}
+                            priority={heroImageIndex === 0}
+                        />
+                    </motion.div>
+                </AnimatePresence>
+
+                {/* Dark Gradient Overlay */}
+                <div className="absolute inset-0 bg-gradient-to-b from-black/70 via-black/50 to-black/80 z-[1]" />
+
+                {/* Decorative Blurs */}
+                <div className="absolute inset-0 opacity-30 z-[2]">
                     <div className="absolute top-10 right-10 w-32 h-32 bg-velvet-rose/20 rounded-full blur-3xl" />
                     <div className="absolute bottom-10 left-10 w-40 h-40 bg-velvet-rose/10 rounded-full blur-3xl" />
                 </div>
 
                 <motion.div
-                    className="relative px-6 py-12 max-w-lg mx-auto text-center"
+                    className="relative px-6 py-12 max-w-lg mx-auto text-center z-[10]"
                     initial="hidden"
                     animate="visible"
                     variants={staggerContainer}
@@ -119,12 +182,21 @@ export default function HomePage() {
                         <span className="gradient-text block">Elegance</span>
                     </motion.h2>
 
-                    <motion.p
-                        variants={fadeInUp}
-                        className="text-beige-300 text-sm mb-6 max-w-xs mx-auto"
-                    >
-                        Your family&apos;s complete grooming destination. Expert stylists, premium services, unforgettable experience.
-                    </motion.p>
+                    {/* Rotating Taglines with Animation */}
+                    <motion.div variants={fadeInUp} className="h-12 mb-6 max-w-xs mx-auto overflow-hidden">
+                        <AnimatePresence mode="wait">
+                            <motion.p
+                                key={taglineIndex}
+                                initial={{ opacity: 0, y: 20 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                exit={{ opacity: 0, y: -20 }}
+                                transition={{ duration: 0.5 }}
+                                className="text-beige-300 text-sm"
+                            >
+                                {taglines[taglineIndex]}
+                            </motion.p>
+                        </AnimatePresence>
+                    </motion.div>
 
                     <motion.div variants={fadeInUp} className="flex flex-col sm:flex-row gap-3 justify-center">
                         <Link href="/book" className="btn-primary animate-pulse-gold">

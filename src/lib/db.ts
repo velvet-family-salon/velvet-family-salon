@@ -401,31 +401,58 @@ export async function getCustomerStats(phone: string): Promise<CustomerStats> {
     // Calculate total visits
     const totalVisits = completedAppointments.length;
 
-    // Calculate total spent
+    // Calculate total spent (sum of all services in each appointment)
     const totalSpent = completedAppointments.reduce((sum, apt) => {
+        if (apt.allServices && apt.allServices.length > 0) {
+            return sum + apt.allServices.reduce((s, svc) => s + (svc.service?.price || 0), 0);
+        }
         return sum + (apt.final_amount || apt.service?.price || 0);
     }, 0);
 
-    // Find favourite service (most frequently booked)
-    const serviceCount: Record<string, { count: number; name: string }> = {};
+    // Find favourite service
+    // Count ALL services from all appointments (including multi-service bookings)
+    const serviceCount: Record<string, { count: number; name: string; price: number }> = {};
+
     completedAppointments.forEach(apt => {
-        if (apt.service) {
+        // Handle multi-service appointments
+        if (apt.allServices && apt.allServices.length > 0) {
+            apt.allServices.forEach(svc => {
+                if (svc.service) {
+                    const id = svc.service.id;
+                    if (!serviceCount[id]) {
+                        serviceCount[id] = { count: 0, name: svc.service.name, price: svc.service.price };
+                    }
+                    serviceCount[id].count++;
+                }
+            });
+        } else if (apt.service) {
+            // Fallback for single service appointments
             const id = apt.service.id;
             if (!serviceCount[id]) {
-                serviceCount[id] = { count: 0, name: apt.service.name };
+                serviceCount[id] = { count: 0, name: apt.service.name, price: apt.service.price };
             }
             serviceCount[id].count++;
         }
     });
 
     let favouriteService: string | null = null;
-    let maxCount = 0;
-    Object.values(serviceCount).forEach(({ count, name }) => {
-        if (count > maxCount) {
-            maxCount = count;
-            favouriteService = name;
+    const services = Object.values(serviceCount);
+
+    if (services.length > 0) {
+        if (totalVisits === 1) {
+            // Single visit: return highest value service
+            const highestValue = services.reduce((prev, curr) =>
+                curr.price > prev.price ? curr : prev
+            );
+            favouriteService = highestValue.name;
+        } else {
+            // Multiple visits: return most frequently booked service
+            const mostFrequent = services.reduce((prev, curr) =>
+                curr.count > prev.count ? curr : prev
+            );
+            favouriteService = mostFrequent.name;
         }
-    });
+    }
 
     // Get last visit date
     const lastVisit = completedAppointments.length > 0
