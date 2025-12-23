@@ -48,7 +48,8 @@ export function generateTimeSlots(
     startTime: string,
     endTime: string,
     durationMinutes: number,
-    bookedSlots: string[] = []
+    bookedSlots: string[] = [],
+    selectedDate?: string
 ): { time: string; available: boolean }[] {
     const slots: { time: string; available: boolean }[] = [];
 
@@ -58,14 +59,23 @@ export function generateTimeSlots(
     const startMinutes = startHour * 60 + startMin;
     const endMinutes = endHour * 60 + endMin;
 
+    // Check if selected date is today
+    const now = new Date();
+    const today = now.toISOString().split('T')[0];
+    const isToday = selectedDate === today;
+    const currentMinutes = now.getHours() * 60 + now.getMinutes();
+
     for (let mins = startMinutes; mins + durationMinutes <= endMinutes; mins += 30) {
         const hours = Math.floor(mins / 60);
         const minutes = mins % 60;
         const timeStr = `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
 
+        // For today, only show future time slots (at least 30 min from now)
+        const isPastTime = isToday && mins < currentMinutes + 30;
+
         slots.push({
             time: timeStr,
-            available: !bookedSlots.includes(timeStr),
+            available: !bookedSlots.includes(timeStr) && !isPastTime,
         });
     }
 

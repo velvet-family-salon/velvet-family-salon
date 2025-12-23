@@ -106,25 +106,31 @@ function BookingContent() {
         SALON_CONFIG.openingHours.start,
         SALON_CONFIG.openingHours.end,
         totalDuration || 30,
-        bookedSlots
+        bookedSlots,
+        booking.date
     ) : [];
 
     const handleAddService = (service: Service) => {
-        if (!booking.services.find(s => s.id === service.id)) {
-            setBooking(prev => ({ ...prev, services: [...prev.services, service] }));
-        }
+        setBooking(prev => {
+            // Check if already selected
+            if (prev.services.find(s => s.id === service.id)) {
+                return prev; // No change
+            }
+            return { ...prev, services: [...prev.services, service] };
+        });
     };
 
     const handleRemoveService = (serviceId: string) => {
-        setBooking(prev => ({
-            ...prev,
-            services: prev.services.filter(s => s.id !== serviceId)
-        }));
+        setBooking(prev => {
+            const filtered = prev.services.filter(s => s.id !== serviceId);
+            return { ...prev, services: filtered };
+        });
     };
 
     const handleContinueToStep2 = () => {
         if (booking.services.length > 0) {
             setBooking(prev => ({ ...prev, step: 2 }));
+            window.scrollTo(0, 0);
         }
     };
 
@@ -138,11 +144,13 @@ function BookingContent() {
 
     const handleTimeSelect = (time: string) => {
         setBooking(prev => ({ ...prev, time, step: 3 }));
+        window.scrollTo(0, 0);
     };
 
     const handleBack = () => {
         if (booking.step > 1) {
             setBooking(prev => ({ ...prev, step: (prev.step - 1) as 1 | 2 | 3 }));
+            window.scrollTo(0, 0);
         }
     };
 
@@ -175,6 +183,7 @@ function BookingContent() {
 
         if (result.success) {
             setShowConfirmation(true);
+            window.scrollTo(0, 0);
         } else {
             alert('Failed to book appointment. Please try again.');
         }
@@ -201,7 +210,7 @@ function BookingContent() {
                     </div>
                 </header>
 
-                <div className="flex-1 flex flex-col items-center overflow-y-auto px-6 pt-12 pb-24">
+                <div className="flex-1 flex flex-col items-center justify-center overflow-y-auto px-6 pb-24">
                     <motion.div
                         initial={{ scale: 0 }}
                         animate={{ scale: 1 }}
@@ -371,14 +380,20 @@ function BookingContent() {
                                             </div>
                                             {isSelected ? (
                                                 <button
-                                                    onClick={() => handleRemoveService(service.id)}
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        handleRemoveService(service.id);
+                                                    }}
                                                     className="p-2 bg-red-500/10 text-red-500 rounded-xl hover:bg-red-500/20 transition-colors"
                                                 >
                                                     <Minus className="w-5 h-5" />
                                                 </button>
                                             ) : (
                                                 <button
-                                                    onClick={() => handleAddService(service)}
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        handleAddService(service);
+                                                    }}
                                                     className="p-2 bg-velvet-rose/10 text-velvet-rose rounded-xl hover:bg-velvet-rose/20 transition-colors"
                                                 >
                                                     <Plus className="w-5 h-5" />

@@ -331,6 +331,115 @@ export async function completeAppointment(
     return true;
 }
 
+// ==================== CUSTOMER HISTORY ====================
+
+export async function getUserByPhone(phone: string): Promise<{ id: string; name: string; created_at: string } | null> {
+    const { data, error } = await supabase
+        .from('users')
+        .select('id, name, created_at')
+        .eq('phone', phone)
+        .maybeSingle();
+
+    if (error) {
+        console.error('Error fetching user by phone:', error);
+        return null;
+    }
+
+    return data;
+}
+
+export async function getAppointmentsByPhone(phone: string): Promise<(Appointment & { allServices?: AppointmentService[] })[]> {
+    // First find the user by phone
+    const user = await getUserByPhone(phone);
+
+    if (!user) {
+        return [];
+    }
+
+    // Fetch all appointments for this user
+    const { data, error } = await supabase
+        .from('appointments')
+        .select(`
+            *,
+            service:services(*),
+            staff:staff(*)
+        `)
+        .eq('user_id', user.id)
+        .order('appointment_date', { ascending: false })
+        .order('start_time', { ascending: false });
+
+    if (error) {
+        console.error('Error fetching appointments by phone:', error);
+        return [];
+    }
+
+    if (!data) return [];
+
+    // Fetch all services for each appointment
+    const appointmentsWithServices = await Promise.all(
+        data.map(async (apt) => {
+            const services = await getAppointmentServices(apt.id);
+            return { ...apt, allServices: services };
+        })
+    );
+
+    return appointmentsWithServices;
+}
+
+export interface CustomerStats {
+    totalVisits: number;
+    totalSpent: number;
+    favouriteService: string | null;
+    lastVisit: string | null;
+}
+
+export async function getCustomerStats(phone: string): Promise<CustomerStats> {
+    const appointments = await getAppointmentsByPhone(phone);
+
+    const completedAppointments = appointments.filter(apt => apt.status === 'completed');
+
+    // Calculate total visits
+    const totalVisits = completedAppointments.length;
+
+    // Calculate total spent
+    const totalSpent = completedAppointments.reduce((sum, apt) => {
+        return sum + (apt.final_amount || apt.service?.price || 0);
+    }, 0);
+
+    // Find favourite service (most frequently booked)
+    const serviceCount: Record<string, { count: number; name: string }> = {};
+    completedAppointments.forEach(apt => {
+        if (apt.service) {
+            const id = apt.service.id;
+            if (!serviceCount[id]) {
+                serviceCount[id] = { count: 0, name: apt.service.name };
+            }
+            serviceCount[id].count++;
+        }
+    });
+
+    let favouriteService: string | null = null;
+    let maxCount = 0;
+    Object.values(serviceCount).forEach(({ count, name }) => {
+        if (count > maxCount) {
+            maxCount = count;
+            favouriteService = name;
+        }
+    });
+
+    // Get last visit date
+    const lastVisit = completedAppointments.length > 0
+        ? completedAppointments[0].appointment_date
+        : null;
+
+    return {
+        totalVisits,
+        totalSpent,
+        favouriteService,
+        lastVisit,
+    };
+}
+
 // ==================== ADMIN SERVICES CRUD ====================
 
 export async function uploadServiceImage(file: File): Promise<string | null> {
