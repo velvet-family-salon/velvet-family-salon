@@ -201,7 +201,7 @@ function BookingContent() {
                     </div>
                 </header>
 
-                <div className="flex-1 flex flex-col items-center justify-start px-6 pb-24 pt-12">
+                <div className="flex-1 flex flex-col items-center overflow-y-auto px-6 pt-12 pb-24">
                     <motion.div
                         initial={{ scale: 0 }}
                         animate={{ scale: 1 }}
@@ -341,8 +341,27 @@ function BookingContent() {
                                             className={`card p-4 flex items-center gap-4 transition-all ${isSelected ? 'ring-2 ring-velvet-rose bg-velvet-rose/5' : ''}`}
                                             whileHover={{ scale: 1.01 }}
                                         >
-                                            <div className="w-14 h-14 bg-gradient-to-br from-beige-100 to-beige-200 dark:from-velvet-dark dark:to-velvet-gray rounded-xl flex items-center justify-center flex-shrink-0">
-                                                <span className="text-xl">✂️</span>
+                                            <div className="w-16 h-16 rounded-xl bg-gradient-to-br from-beige-100 to-beige-200 dark:from-velvet-dark dark:to-velvet-gray flex items-center justify-center flex-shrink-0 overflow-hidden border border-[var(--card-border)] relative">
+                                                {service.image_url ? (
+                                                    <>
+                                                        <img
+                                                            src={service.image_url}
+                                                            alt={service.name}
+                                                            className="w-full h-full object-cover"
+                                                            onError={(e) => {
+                                                                const target = e.target as HTMLImageElement;
+                                                                target.style.display = 'none';
+                                                                const fallback = target.nextElementSibling as HTMLElement;
+                                                                if (fallback) fallback.style.display = 'flex';
+                                                            }}
+                                                        />
+                                                        <div style={{ display: 'none' }} className="w-full h-full items-center justify-center">
+                                                            <span className="text-xl">✂️</span>
+                                                        </div>
+                                                    </>
+                                                ) : (
+                                                    <span className="text-xl">✂️</span>
+                                                )}
                                             </div>
                                             <div className="flex-1">
                                                 <h3 className="font-semibold">{service.name}</h3>

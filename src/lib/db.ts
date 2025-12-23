@@ -333,6 +333,27 @@ export async function completeAppointment(
 
 // ==================== ADMIN SERVICES CRUD ====================
 
+export async function uploadServiceImage(file: File): Promise<string | null> {
+    const fileExt = file.name.split('.').pop();
+    const fileName = `${Math.random().toString(36).substring(2)}-${Date.now()}.${fileExt}`;
+    const filePath = `${fileName}`;
+
+    const { error: uploadError } = await supabase.storage
+        .from('service-images')
+        .upload(filePath, file);
+
+    if (uploadError) {
+        console.error('Error uploading image:', uploadError);
+        return null;
+    }
+
+    const { data: { publicUrl } } = supabase.storage
+        .from('service-images')
+        .getPublicUrl(filePath);
+
+    return publicUrl;
+}
+
 export async function createService(service: Partial<Service>): Promise<boolean> {
     const { error } = await supabase
         .from('services')

@@ -9,7 +9,7 @@ import {
     Search, Plus, Edit2, Trash2, ToggleLeft, ToggleRight, Loader2, MessageSquare, Settings,
     X, Save, IndianRupee, Clock
 } from 'lucide-react';
-import { getAllServices, updateService, deleteService, createService } from '@/lib/db';
+import { getAllServices, updateService, deleteService, createService, uploadServiceImage } from '@/lib/db';
 import { Service, ServiceCategory } from '@/lib/types';
 import { formatPrice, formatDuration } from '@/lib/utils';
 
@@ -24,6 +24,7 @@ export default function AdminServicesPage() {
     const [showModal, setShowModal] = useState(false);
     const [editingId, setEditingId] = useState<string | null>(null);
     const [saving, setSaving] = useState(false);
+    const [uploading, setUploading] = useState(false);
 
     // Form state
     const [formData, setFormData] = useState({
@@ -32,6 +33,7 @@ export default function AdminServicesPage() {
         price: '',
         duration_minutes: '30',
         category: 'unisex' as ServiceCategory,
+        image_url: '',
         is_active: true,
     });
 
@@ -83,6 +85,7 @@ export default function AdminServicesPage() {
             price: '',
             duration_minutes: '30',
             category: 'unisex',
+            image_url: '',
             is_active: true,
         });
         setShowModal(true);
@@ -96,10 +99,25 @@ export default function AdminServicesPage() {
             price: service.price.toString(),
             duration_minutes: service.duration_minutes.toString(),
             category: service.category,
+            image_url: service.image_url || '',
             is_active: service.is_active,
         });
         setShowModal(true);
     }
+
+    const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        setUploading(true);
+        const url = await uploadServiceImage(file);
+        if (url) {
+            setFormData({ ...formData, image_url: url });
+        } else {
+            alert('Failed to upload image. Please ensure you have created a "service-images" bucket in Supabase and set its policy to public.');
+        }
+        setUploading(false);
+    };
 
     async function handleSubmit(e: React.FormEvent) {
         e.preventDefault();
@@ -111,6 +129,7 @@ export default function AdminServicesPage() {
             price: parseFloat(formData.price),
             duration_minutes: parseInt(formData.duration_minutes),
             category: formData.category,
+            image_url: formData.image_url || null,
             is_active: formData.is_active,
         };
 
@@ -238,8 +257,27 @@ export default function AdminServicesPage() {
                                 className={`bg-white dark:bg-velvet-dark rounded-2xl border border-beige-200 dark:border-velvet-gray p-4 ${!service.is_active ? 'opacity-60' : ''}`}
                             >
                                 <div className="flex items-start gap-4">
-                                    <div className="w-14 h-14 rounded-xl bg-gold/10 flex items-center justify-center flex-shrink-0">
-                                        <span className="text-2xl">✂️</span>
+                                    <div className="w-16 h-16 rounded-xl bg-gold/10 overflow-hidden flex items-center justify-center flex-shrink-0 border border-beige-200 dark:border-velvet-gray relative">
+                                        {service.image_url ? (
+                                            <>
+                                                <img
+                                                    src={service.image_url}
+                                                    alt={service.name}
+                                                    className="w-full h-full object-cover"
+                                                    onError={(e) => {
+                                                        const target = e.target as HTMLImageElement;
+                                                        target.style.display = 'none';
+                                                        const fallback = target.nextElementSibling as HTMLElement;
+                                                        if (fallback) fallback.style.display = 'flex';
+                                                    }}
+                                                />
+                                                <div style={{ display: 'none' }} className="w-full h-full items-center justify-center">
+                                                    <span className="text-2xl">✂️</span>
+                                                </div>
+                                            </>
+                                        ) : (
+                                            <span className="text-2xl">✂️</span>
+                                        )}
                                     </div>
                                     <div className="flex-1 min-w-0">
                                         <div className="flex items-start justify-between gap-2">
@@ -414,6 +452,38 @@ export default function AdminServicesPage() {
                                         <option value="women">Women</option>
                                         <option value="unisex">Unisex</option>
                                     </select>
+                                </div>
+
+                                <div>
+                                    <label className="block text-sm font-medium mb-1">Service Image</label>
+                                    <div className="flex items-center gap-4">
+                                        <div className="w-16 h-16 rounded-xl bg-gold/10 overflow-hidden flex items-center justify-center flex-shrink-0 border border-beige-200 dark:border-velvet-gray">
+                                            {formData.image_url ? (
+                                                <img src={formData.image_url} alt="Preview" className="w-full h-full object-cover" />
+                                            ) : (
+                                                <Scissors className="w-6 h-6 text-gold" />
+                                            )}
+                                        </div>
+                                        <div className="flex-1">
+                                            <input
+                                                type="file"
+                                                accept="image/*"
+                                                onChange={handleImageUpload}
+                                                className="hidden"
+                                                id="image-upload"
+                                            />
+                                            <label
+                                                htmlFor="image-upload"
+                                                className="btn-secondary text-sm py-2 cursor-pointer inline-flex items-center gap-2"
+                                            >
+                                                {uploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+                                                {formData.image_url ? 'Change Image' : 'Upload Image'}
+                                            </label>
+                                            <p className="text-[10px] text-[var(--muted)] mt-1">
+                                                Recommended: Square or 16:9 ratio. Max 5MB.
+                                            </p>
+                                        </div>
+                                    </div>
                                 </div>
 
                                 <div className="flex items-center gap-2">

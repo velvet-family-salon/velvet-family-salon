@@ -26,8 +26,27 @@ export function ServiceCard({ service, compact = false }: ServiceCardProps) {
                     whileHover={{ scale: 1.02 }}
                     whileTap={{ scale: 0.98 }}
                 >
-                    <div className="aspect-square bg-gradient-to-br from-beige-100 to-beige-200 dark:from-velvet-dark dark:to-velvet-gray rounded-xl mb-2 flex items-center justify-center">
-                        <Scissors className="w-8 h-8 text-velvet-rose/50" />
+                    <div className="aspect-square bg-gradient-to-br from-beige-100 to-beige-200 dark:from-velvet-dark dark:to-velvet-gray rounded-xl mb-2 flex items-center justify-center overflow-hidden border border-[var(--card-border)] relative">
+                        {service.image_url ? (
+                            <>
+                                <img
+                                    src={service.image_url}
+                                    alt={service.name}
+                                    className="w-full h-full object-cover"
+                                    onError={(e) => {
+                                        const target = e.target as HTMLImageElement;
+                                        target.style.display = 'none';
+                                        const fallback = target.nextElementSibling as HTMLElement;
+                                        if (fallback) fallback.style.display = 'flex';
+                                    }}
+                                />
+                                <div style={{ display: 'none' }} className="w-full h-full items-center justify-center">
+                                    <Scissors className="w-8 h-8 text-velvet-rose/50" />
+                                </div>
+                            </>
+                        ) : (
+                            <Scissors className="w-8 h-8 text-velvet-rose/50" />
+                        )}
                     </div>
                     <h4 className="font-semibold text-sm leading-tight mb-1 line-clamp-1">
                         {service.name}
@@ -52,8 +71,27 @@ export function ServiceCard({ service, compact = false }: ServiceCardProps) {
                 whileHover={{ scale: 1.01 }}
                 whileTap={{ scale: 0.99 }}
             >
-                <div className="w-20 h-20 bg-gradient-to-br from-beige-100 to-beige-200 dark:from-velvet-dark dark:to-velvet-gray rounded-xl flex items-center justify-center flex-shrink-0">
-                    <Scissors className="w-8 h-8 text-velvet-rose/50" />
+                <div className="w-20 h-20 bg-gradient-to-br from-beige-100 to-beige-200 dark:from-velvet-dark dark:to-velvet-gray rounded-xl flex items-center justify-center flex-shrink-0 overflow-hidden border border-[var(--card-border)] relative">
+                    {service.image_url ? (
+                        <>
+                            <img
+                                src={service.image_url}
+                                alt={service.name}
+                                className="w-full h-full object-cover"
+                                onError={(e) => {
+                                    const target = e.target as HTMLImageElement;
+                                    target.style.display = 'none';
+                                    const fallback = target.nextElementSibling as HTMLElement;
+                                    if (fallback) fallback.style.display = 'flex';
+                                }}
+                            />
+                            <div style={{ display: 'none' }} className="w-full h-full items-center justify-center">
+                                <Scissors className="w-8 h-8 text-velvet-rose/50" />
+                            </div>
+                        </>
+                    ) : (
+                        <Scissors className="w-8 h-8 text-velvet-rose/50" />
+                    )}
                 </div>
 
                 <div className="flex-1 min-w-0">
