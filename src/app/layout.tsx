@@ -3,6 +3,8 @@ import { Outfit, Playfair_Display } from 'next/font/google';
 import './globals.css';
 import { BottomNav } from '@/components/layout/BottomNav';
 import { ThemeProvider } from '@/components/providers/ThemeProvider';
+import { ToastProvider } from '@/components/ui/Toast';
+import { AuthProvider } from '@/context/AuthContext';
 
 const outfit = Outfit({
     subsets: ['latin'],
@@ -27,6 +29,12 @@ export const metadata: Metadata = {
         type: 'website',
         locale: 'en_IN',
     },
+    manifest: '/manifest.json',
+    appleWebApp: {
+        capable: true,
+        statusBarStyle: 'black-translucent',
+        title: 'Velvet Salon',
+    },
 };
 
 export const viewport: Viewport = {
@@ -46,15 +54,27 @@ export default function RootLayout({
     children: React.ReactNode;
 }) {
     return (
-        <html lang="en" suppressHydrationWarning>
+        <html lang="en" suppressHydrationWarning data-scroll-behavior="smooth">
+            <head>
+                <link rel="preconnect" href="https://hvjprbquuqeqhwnjbwcg.supabase.co" />
+                <link rel="apple-touch-icon" sizes="180x180" href="/icons/apple-touch-icon.png" />
+            </head>
             <body className={`${outfit.variable} ${playfair.variable} font-sans antialiased`}>
-                <ThemeProvider>
-                    <main className="min-h-screen pb-safe">
-                        {children}
-                    </main>
-                    <BottomNav />
-                </ThemeProvider>
+                <AuthProvider>
+                    <ThemeProvider>
+                        <ToastProvider>
+                            <main className="min-h-screen pb-safe">
+                                {children}
+                            </main>
+                            <BottomNav />
+                        </ToastProvider>
+                    </ThemeProvider>
+                </AuthProvider>
             </body>
         </html>
     );
 }
+
+
+
+

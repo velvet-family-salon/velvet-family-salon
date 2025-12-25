@@ -1,5 +1,5 @@
 import { createClient } from './supabase/client';
-import { Service, Staff, Appointment, Testimonial, ReviewsConfig, AppointmentService } from './types';
+import { Service, Staff, Appointment, Testimonial, ReviewsConfig, AppointmentService, Bill, BillService } from './types';
 
 const supabase = createClient();
 
@@ -18,6 +18,34 @@ export async function getServices(): Promise<Service[]> {
     }
 
     return data || [];
+}
+
+export async function getMostBookedServices(limit: number = 4): Promise<Service[]> {
+    try {
+        const { data: appointments, error } = await supabase
+            .from('appointment_services')
+            .select('service_id')
+            .limit(200);
+
+        if (error || !appointments) {
+            console.error('Error fetching appointment stats:', error);
+            return (await getServices()).slice(0, limit);
+        }
+
+        const counts: Record<string, number> = {};
+        appointments.forEach(app => {
+            counts[app.service_id] = (counts[app.service_id] || 0) + 1;
+        });
+
+        const allServices = await getServices();
+
+        return allServices
+            .sort((a, b) => (counts[b.id] || 0) - (counts[a.id] || 0))
+            .slice(0, limit);
+    } catch (e) {
+        console.error("Failed to get most booked services", e);
+        return [];
+    }
 }
 
 export async function getServiceById(id: string): Promise<Service | null> {
@@ -55,20 +83,23 @@ export async function getStaff(): Promise<Staff[]> {
     const { data, error } = await supabase
         .from('staff')
         .select('*')
-        .eq('is_active', true);
+        .eq('is_active', true)
+        .eq('is_deleted', false)
+        .order('name');
 
     if (error) {
         console.error('Error fetching staff:', error);
         return [];
     }
-
     return data || [];
 }
 
 export async function getAllStaff(): Promise<Staff[]> {
     const { data, error } = await supabase
         .from('staff')
-        .select('*');
+        .select('*')
+        .eq('is_deleted', false)
+        .order('name');
 
     if (error) {
         console.error('Error fetching all staff:', error);
@@ -275,7 +306,7 @@ export async function createAppointment(appointment: {
         appointment_id: appointmentData.id,
         service_id: serviceId,
         staff_id: appointment.staff_id || null,
-        is_completed: false,
+        is_completed: true, // Services are checked by default
     }));
 
     const { error: servicesError } = await supabase
@@ -312,13 +343,15 @@ export async function updateAppointmentStatus(
 export async function completeAppointment(
     id: string,
     finalAmount: number,
-    paymentMode: 'cash' | 'upi' | 'card'
+    paymentMode: 'cash' | 'upi' | 'card',
+    discountPercent: number = 0
 ): Promise<boolean> {
     const { error } = await supabase
         .from('appointments')
         .update({
             status: 'completed',
             final_amount: finalAmount,
+            discount_percent: discountPercent,
             payment_mode: paymentMode,
         })
         .eq('id', id);
@@ -389,6 +422,7 @@ export async function getAppointmentsByPhone(phone: string): Promise<(Appointmen
 export interface CustomerStats {
     totalVisits: number;
     totalSpent: number;
+    totalSavings: number;
     favouriteService: string | null;
     lastVisit: string | null;
 }
@@ -401,12 +435,20 @@ export async function getCustomerStats(phone: string): Promise<CustomerStats> {
     // Calculate total visits
     const totalVisits = completedAppointments.length;
 
-    // Calculate total spent (sum of all services in each appointment)
+    // Calculate total spent (actual final amounts paid)
     const totalSpent = completedAppointments.reduce((sum, apt) => {
-        if (apt.allServices && apt.allServices.length > 0) {
-            return sum + apt.allServices.reduce((s, svc) => s + (svc.service?.price || 0), 0);
+        return sum + (apt.final_amount || 0);
+    }, 0);
+
+    // Calculate total savings from discounts
+    const totalSavings = completedAppointments.reduce((sum, apt) => {
+        if (apt.discount_percent && apt.discount_percent > 0) {
+            const originalTotal = apt.allServices && apt.allServices.length > 0
+                ? apt.allServices.reduce((s, svc) => s + (svc.service?.price || 0), 0)
+                : apt.service?.price || 0;
+            return sum + Math.round(originalTotal * (apt.discount_percent / 100));
         }
-        return sum + (apt.final_amount || apt.service?.price || 0);
+        return sum;
     }, 0);
 
     // Find favourite service
@@ -462,6 +504,7 @@ export async function getCustomerStats(phone: string): Promise<CustomerStats> {
     return {
         totalVisits,
         totalSpent,
+        totalSavings,
         favouriteService,
         lastVisit,
     };
@@ -584,7 +627,7 @@ export async function updateStaff(id: string, updates: Partial<Staff>): Promise<
 export async function deleteStaff(id: string): Promise<boolean> {
     const { error } = await supabase
         .from('staff')
-        .delete()
+        .update({ is_deleted: true, is_active: false })
         .eq('id', id);
 
     if (error) {
@@ -785,18 +828,62 @@ export async function getAppointmentServices(appointmentId: string): Promise<App
     return data || [];
 }
 
-export async function updateServiceCompletion(id: string, isCompleted: boolean): Promise<boolean> {
+export async function updateServiceCompletion(
+    id: string,
+    isCompleted: boolean,
+    cancellationReason?: string | null
+): Promise<boolean> {
+    const updateData: any = { is_completed: isCompleted };
+
+    // If marking as incomplete, store the reason
+    if (!isCompleted && cancellationReason) {
+        updateData.cancellation_reason = cancellationReason;
+    }
+
+    // If marking as complete, clear any previous cancellation reason
+    if (isCompleted) {
+        updateData.cancellation_reason = null;
+    }
+
     const { error } = await supabase
         .from('appointment_services')
-        .update({ is_completed: isCompleted })
+        .update(updateData)
         .eq('id', id);
 
     if (error) {
-        console.error('Error updating service completion:', error);
+        console.error('Error updating service completion:', error.message, error.details, error.hint);
         return false;
     }
 
     return true;
+}
+
+export async function addServiceToAppointment(
+    appointmentId: string,
+    serviceId: string,
+    staffId: string | null = null
+): Promise<AppointmentService | null> {
+    const { data, error } = await supabase
+        .from('appointment_services')
+        .insert({
+            appointment_id: appointmentId,
+            service_id: serviceId,
+            staff_id: staffId,
+            is_completed: true // Checked by default
+        })
+        .select(`
+            *,
+            service:services(*),
+            staff:staff(*)
+        `)
+        .single();
+
+    if (error) {
+        console.error('Error adding service to appointment:', error.message, error.details);
+        return null;
+    }
+
+    return data;
 }
 
 export async function updateServiceStaff(id: string, staffId: string | null): Promise<boolean> {
@@ -827,4 +914,244 @@ export async function updateServiceFinalPrice(id: string, finalPrice: number): P
     return true;
 }
 
+// ==================== BILLS ====================
 
+export async function generateBillNumber(date: Date): Promise<string> {
+    const dateStr = date.toISOString().split('T')[0];
+
+    // Count existing bills for this date
+    const { count, error } = await supabase
+        .from('bills')
+        .select('*', { count: 'exact', head: true })
+        .eq('bill_date', dateStr);
+
+    if (error) {
+        console.error('Error counting bills:', error);
+    }
+
+    const nextNum = (count || 0) + 1;
+    const dateFormatted = date.toISOString().split('T')[0].replace(/-/g, '');
+    return `VFS-${dateFormatted}-${nextNum.toString().padStart(3, '0')}`;
+}
+
+export async function createBill(billData: {
+    appointment_id?: string;
+    customer_name: string;
+    customer_phone?: string;
+    customer_email?: string;
+    services: BillService[];
+    subtotal: number;
+    discount_percent: number;
+    discount_amount: number;
+    final_amount: number;
+    payment_mode: 'cash' | 'upi' | 'card';
+    staff_name?: string;
+    notes?: string;
+}): Promise<Bill | null> {
+    const now = new Date();
+    const billNumber = await generateBillNumber(now);
+    const billDate = now.toISOString().split('T')[0];
+    const billTime = now.toTimeString().split(' ')[0];
+
+    const { data, error } = await supabase
+        .from('bills')
+        .insert({
+            bill_number: billNumber,
+            appointment_id: billData.appointment_id || null,
+            customer_name: billData.customer_name,
+            customer_phone: billData.customer_phone || null,
+            customer_email: billData.customer_email || null,
+            bill_date: billDate,
+            bill_time: billTime,
+            services: billData.services,
+            subtotal: billData.subtotal,
+            discount_percent: billData.discount_percent,
+            discount_amount: billData.discount_amount,
+            final_amount: billData.final_amount,
+            payment_mode: billData.payment_mode,
+            staff_name: billData.staff_name || null,
+            notes: billData.notes || null,
+        })
+        .select()
+        .single();
+
+    if (error) {
+        console.error('Error creating bill:', error);
+        return null;
+    }
+
+    return data;
+}
+
+export async function getBillByAppointment(appointmentId: string): Promise<Bill | null> {
+    const { data, error } = await supabase
+        .from('bills')
+        .select('*')
+        .eq('appointment_id', appointmentId)
+        .maybeSingle();
+
+    if (error) {
+        console.error('Error fetching bill:', error);
+        return null;
+    }
+
+    return data;
+}
+
+export async function getBillsByDate(date: string): Promise<Bill[]> {
+    const { data, error } = await supabase
+        .from('bills')
+        .select('*')
+        .eq('bill_date', date)
+        .order('created_at', { ascending: false });
+
+    if (error) {
+        console.error('Error fetching bills by date:', error);
+        return [];
+    }
+
+    return data || [];
+}
+
+export async function getTodayRevenue(): Promise<{ total: number; count: number }> {
+    const today = new Date().toISOString().split('T')[0];
+    const bills = await getBillsByDate(today);
+
+    const total = bills.reduce((sum, bill) => sum + (bill.final_amount || 0), 0);
+    return { total, count: bills.length };
+}
+
+export async function getRecentBills(limit: number = 5): Promise<Bill[]> {
+    const { data, error } = await supabase
+        .from('bills')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(limit);
+
+    if (error) {
+        console.error('Error fetching recent bills:', error);
+        return [];
+    }
+
+    return data || [];
+}
+
+export async function getAllBills(): Promise<Bill[]> {
+    const { data, error } = await supabase
+        .from('bills')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+    if (error) {
+        console.error('Error fetching all bills:', error);
+        return [];
+    }
+
+    return data || [];
+}
+
+export interface RevenueStats {
+    totalRevenue: number;
+    totalBills: number;
+    totalClients: number;
+    avgBillValue: number;
+    totalDiscount: number;
+    billsWithDiscount: number;
+    avgDiscountPercent: number;
+    serviceStats: { name: string; count: number; revenue: number }[];
+    monthlyRevenue: { month: string; revenue: number; bills: number }[];
+    bestMonth: { month: string; revenue: number } | null;
+    worstMonth: { month: string; revenue: number } | null;
+    todayRevenue: number;
+    mtdRevenue: number;
+    ytdRevenue: number;
+}
+
+export async function getRevenueStats(): Promise<RevenueStats> {
+    const bills = await getAllBills();
+
+    const now = new Date();
+    const today = now.toISOString().split('T')[0];
+    const currentMonth = now.toISOString().slice(0, 7);
+    const currentYear = now.getFullYear().toString();
+
+    // Basic metrics
+    const totalRevenue = bills.reduce((sum, b) => sum + (b.final_amount || 0), 0);
+    const totalBills = bills.length;
+    const uniquePhones = new Set(bills.map(b => b.customer_phone).filter(Boolean));
+    const totalClients = uniquePhones.size;
+    const avgBillValue = totalBills > 0 ? Math.round(totalRevenue / totalBills) : 0;
+
+    // Discount metrics
+    const billsWithDiscount = bills.filter(b => b.discount_percent > 0).length;
+    const totalDiscount = bills.reduce((sum, b) => sum + (b.discount_amount || 0), 0);
+    const avgDiscountPercent = billsWithDiscount > 0
+        ? Math.round(bills.filter(b => b.discount_percent > 0).reduce((sum, b) => sum + b.discount_percent, 0) / billsWithDiscount)
+        : 0;
+
+    // Service stats
+    const serviceMap: Record<string, { count: number; revenue: number }> = {};
+    bills.forEach(bill => {
+        bill.services.forEach(svc => {
+            if (!serviceMap[svc.name]) {
+                serviceMap[svc.name] = { count: 0, revenue: 0 };
+            }
+            serviceMap[svc.name].count++;
+            serviceMap[svc.name].revenue += svc.price;
+        });
+    });
+    const serviceStats = Object.entries(serviceMap)
+        .map(([name, data]) => ({ name, ...data }))
+        .sort((a, b) => b.count - a.count)
+        .slice(0, 10);
+
+    // Monthly revenue
+    const monthMap: Record<string, { revenue: number; bills: number }> = {};
+    bills.forEach(bill => {
+        const month = bill.bill_date.slice(0, 7);
+        if (!monthMap[month]) {
+            monthMap[month] = { revenue: 0, bills: 0 };
+        }
+        monthMap[month].revenue += bill.final_amount || 0;
+        monthMap[month].bills++;
+    });
+    const monthlyRevenue = Object.entries(monthMap)
+        .map(([month, data]) => ({ month, ...data }))
+        .sort((a, b) => a.month.localeCompare(b.month));
+
+    // Best/Worst month
+    let bestMonth: { month: string; revenue: number } | null = null;
+    let worstMonth: { month: string; revenue: number } | null = null;
+    if (monthlyRevenue.length > 0) {
+        bestMonth = monthlyRevenue.reduce((best, curr) => curr.revenue > best.revenue ? curr : best);
+        worstMonth = monthlyRevenue.reduce((worst, curr) => curr.revenue < worst.revenue ? curr : worst);
+    }
+
+    // Today/MTD/YTD
+    const todayRevenue = bills
+        .filter(b => b.bill_date === today)
+        .reduce((sum, b) => sum + (b.final_amount || 0), 0);
+    const mtdRevenue = bills
+        .filter(b => b.bill_date.startsWith(currentMonth))
+        .reduce((sum, b) => sum + (b.final_amount || 0), 0);
+    const ytdRevenue = bills
+        .filter(b => b.bill_date.startsWith(currentYear))
+        .reduce((sum, b) => sum + (b.final_amount || 0), 0);
+
+    return {
+        totalRevenue,
+        totalBills,
+        totalClients,
+        avgBillValue,
+        totalDiscount,
+        billsWithDiscount,
+        avgDiscountPercent,
+        serviceStats,
+        monthlyRevenue,
+        bestMonth,
+        worstMonth,
+        todayRevenue,
+        mtdRevenue,
+        ytdRevenue,
+    };
+}

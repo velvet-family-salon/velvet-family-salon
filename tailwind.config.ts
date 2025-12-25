@@ -47,6 +47,7 @@ const config: Config = {
                 'slide-in-right': 'slideInRight 0.3s ease-out',
                 'pulse-rose': 'pulseRose 2s infinite',
                 'shimmer': 'shimmer 2s infinite',
+                'borderTravel': 'borderTravel 4s linear infinite',
             },
             keyframes: {
                 fadeIn: {
@@ -68,6 +69,13 @@ const config: Config = {
                 shimmer: {
                     '0%': { backgroundPosition: '-200% 0' },
                     '100%': { backgroundPosition: '200% 0' },
+                },
+                borderTravel: {
+                    '0%': { top: '0', left: '0' },
+                    '25%': { top: '0', left: '100%' },
+                    '50%': { top: '100%', left: '100%' },
+                    '75%': { top: '100%', left: '0' },
+                    '100%': { top: '0', left: '0' },
                 },
             },
             backgroundImage: {

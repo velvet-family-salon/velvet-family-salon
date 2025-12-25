@@ -2,14 +2,15 @@
 
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ArrowLeft, Search, Loader2 } from 'lucide-react';
+import { ArrowLeft, Search, Loader2, Sparkles } from 'lucide-react';
 import Link from 'next/link';
 import { getServices } from '@/lib/db';
 import { ServiceCard } from '@/components/ui/ServiceCard';
 import { Service, ServiceCategory } from '@/lib/types';
 
-const categories: { value: ServiceCategory | 'all'; label: string }[] = [
+const categories: { value: ServiceCategory | 'all' | 'combo'; label: string; icon?: any }[] = [
     { value: 'all', label: 'All' },
+    { value: 'combo', label: 'Combo Offers', icon: Sparkles },
     { value: 'men', label: 'Men' },
     { value: 'women', label: 'Women' },
     { value: 'unisex', label: 'Unisex' },
@@ -18,7 +19,7 @@ const categories: { value: ServiceCategory | 'all'; label: string }[] = [
 export default function ServicesPage() {
     const [services, setServices] = useState<Service[]>([]);
     const [loading, setLoading] = useState(true);
-    const [selectedCategory, setSelectedCategory] = useState<ServiceCategory | 'all'>('all');
+    const [selectedCategory, setSelectedCategory] = useState<ServiceCategory | 'all' | 'combo'>('all');
     const [searchQuery, setSearchQuery] = useState('');
 
     useEffect(() => {
@@ -32,7 +33,8 @@ export default function ServicesPage() {
     }, []);
 
     const filteredServices = services.filter((service) => {
-        const matchesCategory = selectedCategory === 'all' || service.category === selectedCategory;
+        const matchesCategory = selectedCategory === 'all' ||
+            (selectedCategory === 'combo' ? service.is_combo : service.category === selectedCategory);
         const matchesSearch = service.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
             (service.description?.toLowerCase().includes(searchQuery.toLowerCase()) ?? false);
         return matchesCategory && matchesSearch;
@@ -71,11 +73,14 @@ export default function ServicesPage() {
                         <button
                             key={cat.value}
                             onClick={() => setSelectedCategory(cat.value)}
-                            className={`px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap transition-all ${selectedCategory === cat.value
-                                    ? 'bg-velvet-rose text-velvet-black'
+                            className={`px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap transition-all flex items-center gap-2 ${selectedCategory === cat.value
+                                ? 'bg-velvet-rose text-white shadow-lg shadow-velvet-rose/20'
+                                : cat.value === 'combo'
+                                    ? 'bg-gradient-to-r from-purple-100 to-indigo-100 dark:from-purple-900/40 dark:to-indigo-900/40 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-700/50 hover:shadow-md'
                                     : 'bg-[var(--card-bg)] border border-[var(--card-border)] text-[var(--foreground)]'
                                 }`}
                         >
+                            {cat.icon && <cat.icon className="w-4 h-4" />}
                             {cat.label}
                         </button>
                     ))}

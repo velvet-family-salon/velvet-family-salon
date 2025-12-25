@@ -109,6 +109,20 @@ body {
   animation: shimmer 2s infinite;
 }
 
+@keyframes shine {
+  0% {
+    transform: translateX(-100%) skewX(-12deg);
+  }
+
+  100% {
+    transform: translateX(200%) skewX(-12deg);
+  }
+}
+
+.animate-shine {
+  animation: shine 2s infinite linear;
+}
+
 /* Bottom navigation safe area */
 .pb-safe {
   padding-bottom: calc(80px + env(safe-area-inset-bottom, 0px));

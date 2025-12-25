@@ -3,11 +3,13 @@
 import { useState, useEffect, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ArrowLeft, Check, User, Calendar, Clock, ChevronRight, X, Loader2, Plus, Minus, ShoppingBag } from 'lucide-react';
+import { ArrowLeft, Check, Calendar, Clock, User, ChevronRight, X, Loader2, Plus, Minus, ShoppingBag, Sparkles } from 'lucide-react';
 import Link from 'next/link';
 import { getServices, getStaff, getBookedSlots, createAppointment } from '@/lib/db';
 import { Service, Staff, BookingState } from '@/lib/types';
 import { formatPrice, formatDuration, formatTime, getNextNDays, generateTimeSlots, SALON_CONFIG, getWhatsAppLink } from '@/lib/utils';
+import { ServiceListSkeleton, StaffCarouselSkeleton } from '@/components/ui/Skeleton';
+import { useToast } from '@/components/ui/Toast';
 
 // Step indicator component
 function StepIndicator({ currentStep }: { currentStep: number }) {
@@ -38,6 +40,7 @@ function StepIndicator({ currentStep }: { currentStep: number }) {
 function BookingContent() {
     const searchParams = useSearchParams();
     const router = useRouter();
+    const { showToast } = useToast();
     const preselectedServiceId = searchParams.get('service');
 
     const [allServices, setAllServices] = useState<Service[]>([]);
@@ -46,17 +49,50 @@ function BookingContent() {
     const [submitting, setSubmitting] = useState(false);
     const [bookedSlots, setBookedSlots] = useState<string[]>([]);
 
-    const [booking, setBooking] = useState<BookingState>({
+    // Load saved user details from localStorage
+    const getSavedUserDetails = () => {
+        if (typeof window === 'undefined') return { userName: '', userPhone: '', userEmail: '' };
+        try {
+            const saved = localStorage.getItem('velvet_user_details');
+            if (saved) {
+                const parsed = JSON.parse(saved);
+                return {
+                    userName: parsed.userName || '',
+                    userPhone: parsed.userPhone || '',
+                    userEmail: parsed.userEmail || '',
+                };
+            }
+        } catch (e) {
+            console.warn('Failed to load saved user details');
+        }
+        return { userName: '', userPhone: '', userEmail: '' };
+    };
+
+    const [booking, setBooking] = useState<BookingState>(() => ({
         step: 1,
         services: [],
         staff: null,
         date: null,
         time: null,
-        userName: '',
-        userPhone: '',
-        userEmail: '',
-    });
+        ...getSavedUserDetails(),
+    }));
+    const [selectedCategory, setSelectedCategory] = useState<string>('all');
     const [showConfirmation, setShowConfirmation] = useState(false);
+
+    // Save user details when they change
+    useEffect(() => {
+        if (booking.userName || booking.userPhone || booking.userEmail) {
+            try {
+                localStorage.setItem('velvet_user_details', JSON.stringify({
+                    userName: booking.userName,
+                    userPhone: booking.userPhone,
+                    userEmail: booking.userEmail,
+                }));
+            } catch (e) {
+                console.warn('Failed to save user details');
+            }
+        }
+    }, [booking.userName, booking.userPhone, booking.userEmail]);
 
     // Load services and staff from Supabase
     useEffect(() => {
@@ -185,14 +221,33 @@ function BookingContent() {
             setShowConfirmation(true);
             window.scrollTo(0, 0);
         } else {
-            alert('Failed to book appointment. Please try again.');
+            showToast('error', result.error || 'Failed to book appointment. Please try again.');
         }
     };
 
     if (loading) {
         return (
-            <div className="min-h-screen flex items-center justify-center">
-                <Loader2 className="w-8 h-8 text-velvet-rose animate-spin" />
+            <div className="min-h-screen">
+                {/* Header skeleton */}
+                <header className="sticky top-0 z-40 glass border-b border-[var(--card-border)]">
+                    <div className="flex items-center gap-3 px-4 py-3 max-w-lg mx-auto">
+                        <div className="w-9 h-9 rounded-full bg-[var(--card-border)] animate-pulse" />
+                        <div className="h-6 w-40 rounded bg-[var(--card-border)] animate-pulse" />
+                    </div>
+                    <div className="flex justify-center gap-2 py-4">
+                        {[1, 2, 3].map(i => (
+                            <div key={i} className="flex items-center gap-1">
+                                <div className="w-8 h-8 rounded-full bg-[var(--card-border)] animate-pulse" />
+                                {i < 3 && <div className="w-8 h-0.5 bg-[var(--card-border)]" />}
+                            </div>
+                        ))}
+                    </div>
+                </header>
+                <div className="max-w-lg mx-auto px-4 py-4">
+                    <div className="h-6 w-32 rounded bg-[var(--card-border)] animate-pulse mb-2" />
+                    <div className="h-4 w-64 rounded bg-[var(--card-border)] animate-pulse mb-4" />
+                    <ServiceListSkeleton count={5} />
+                </div>
             </div>
         );
     }
@@ -341,67 +396,150 @@ function BookingContent() {
                             <p className="text-sm text-[var(--muted)] mb-4">
                                 Add one or more services to your appointment
                             </p>
+
+                            {/* Category Filter Tabs */}
+                            <div className="flex gap-2 overflow-x-auto pb-4 hide-scrollbar mb-2 sticky top-[70px] bg-[var(--background)] z-20 py-2 -mx-4 px-4 mask-fade-sides transition-all duration-300">
+                                {['all', 'combo', 'men', 'women', 'unisex'].map((cat) => (
+                                    <button
+                                        key={cat}
+                                        onClick={() => setSelectedCategory(cat)}
+                                        className={`px-4 py-2 rounded-full text-sm font-medium transition-all whitespace-nowrap flex items-center gap-2 ${selectedCategory === cat
+                                            ? 'bg-velvet-rose text-white shadow-lg shadow-velvet-rose/20'
+                                            : cat === 'combo'
+                                                ? 'bg-gradient-to-r from-purple-100 to-indigo-100 dark:from-purple-900/40 dark:to-indigo-900/40 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-700/50 hover:shadow-md ring-2 ring-purple-500/20'
+                                                : 'bg-[var(--card-bg)] border border-[var(--card-border)] hover:border-velvet-rose/50'
+                                            }`}
+                                    >
+                                        {cat === 'all' ? 'All Services' :
+                                            cat === 'combo' ? <><Sparkles className="w-4 h-4" /> Combo Offers</> :
+                                                cat.charAt(0).toUpperCase() + cat.slice(1)}
+                                    </button>
+                                ))}
+                            </div>
+
                             <div className="space-y-3">
-                                {allServices.map((service) => {
-                                    const isSelected = booking.services.some(s => s.id === service.id);
-                                    return (
-                                        <motion.div
-                                            key={service.id}
-                                            className={`card p-4 flex items-center gap-4 transition-all ${isSelected ? 'ring-2 ring-velvet-rose bg-velvet-rose/5' : ''}`}
-                                            whileHover={{ scale: 1.01 }}
-                                        >
-                                            <div className="w-16 h-16 rounded-xl bg-gradient-to-br from-beige-100 to-beige-200 dark:from-velvet-dark dark:to-velvet-gray flex items-center justify-center flex-shrink-0 overflow-hidden border border-[var(--card-border)] relative">
-                                                {service.image_url ? (
-                                                    <>
-                                                        <img
-                                                            src={service.image_url}
-                                                            alt={service.name}
-                                                            className="w-full h-full object-cover"
-                                                            onError={(e) => {
-                                                                const target = e.target as HTMLImageElement;
-                                                                target.style.display = 'none';
-                                                                const fallback = target.nextElementSibling as HTMLElement;
-                                                                if (fallback) fallback.style.display = 'flex';
-                                                            }}
-                                                        />
-                                                        <div style={{ display: 'none' }} className="w-full h-full items-center justify-center">
-                                                            <span className="text-xl">✂️</span>
+                                {allServices
+                                    .filter(s => selectedCategory === 'all' ? true : s.category === selectedCategory || (s.is_combo && selectedCategory === 'combo'))
+                                    .map((service) => {
+                                        const isSelected = booking.services.some(s => s.id === service.id);
+                                        return (
+                                            <div
+                                                key={service.id}
+                                                className={`relative card p-4 flex items-center gap-4 transition-all ${service.is_combo ? 'overflow-hidden' : 'overflow-hidden'} ${isSelected ? 'ring-2 ring-velvet-rose bg-velvet-rose/5' : ''}`}
+                                            >
+                                                {/* Animated Rose Border Glow - Only for combo services */}
+                                                {service.is_combo && (
+                                                    <div
+                                                        className="absolute inset-0 rounded-2xl -z-10 animate-pulse"
+                                                        style={{
+                                                            boxShadow: '0 0 0 2px rgb(196, 118, 124), 0 0 20px rgba(196, 118, 124, 0.6)'
+                                                        }}
+                                                    />
+                                                )}
+
+                                                {/* Animated Shine Effect - Only for combo services */}
+                                                {service.is_combo && (
+                                                    <div className="absolute inset-0 opacity-100 transition-opacity duration-1000 pointer-events-none z-30 rounded-2xl overflow-hidden">
+                                                        <div className="absolute inset-0 bg-gradient-to-r from-transparent via-[rgba(196,118,124,0.3)] to-transparent -skew-x-12 animate-shine" />
+                                                    </div>
+                                                )}
+
+                                                {/* Combo Badge */}
+                                                {service.is_combo && (
+                                                    <div className="absolute top-2 left-2 z-10">
+                                                        <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-gradient-to-r from-purple-500 to-pink-500 text-white shadow-lg flex items-center gap-1">
+                                                            <Sparkles className="w-2.5 h-2.5" />
+                                                            COMBO
+                                                        </span>
+                                                    </div>
+                                                )}
+
+                                                {/* Service Image */}
+                                                <div className="w-16 h-16 rounded-xl bg-gradient-to-br from-beige-100 to-beige-200 dark:from-velvet-dark dark:to-velvet-gray flex items-center justify-center flex-shrink-0 overflow-hidden border border-[var(--card-border)] relative">
+                                                    {service.image_url ? (
+                                                        <>
+                                                            <img
+                                                                src={service.image_url}
+                                                                alt={service.name}
+                                                                className="w-full h-full object-cover"
+                                                                onError={(e) => {
+                                                                    const target = e.target as HTMLImageElement;
+                                                                    target.style.display = 'none';
+                                                                    const fallback = target.nextElementSibling as HTMLElement;
+                                                                    if (fallback) fallback.style.display = 'flex';
+                                                                }}
+                                                            />
+                                                            <div style={{ display: 'none' }} className="w-full h-full items-center justify-center">
+                                                                <span className="text-xl">✂️</span>
+                                                            </div>
+                                                        </>
+                                                    ) : (
+                                                        <span className="text-xl">✂️</span>
+                                                    )}
+                                                </div>
+                                                <div className="flex-1 min-w-0">
+                                                    <div className="flex items-center gap-1.5 mb-1">
+                                                        <h3 className="font-semibold truncate">{service.name}</h3>
+                                                        <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-gray-100 dark:bg-gray-800 text-[var(--muted)] font-medium uppercase">
+                                                            {service.category}
+                                                        </span>
+                                                    </div>
+
+                                                    {/* Included Services for Combo */}
+                                                    {service.is_combo && service.included_services && service.included_services.length > 0 && (
+                                                        <div className="flex flex-wrap gap-1 mb-2">
+                                                            {service.included_services.map((item: any) => (
+                                                                <span key={item.id} className="text-[10px] px-1.5 py-0.5 rounded-full bg-purple-50 dark:bg-purple-900/20 text-purple-700 dark:text-purple-300 border border-purple-100 dark:border-purple-800/50">
+                                                                    + {item.name}
+                                                                </span>
+                                                            ))}
                                                         </div>
-                                                    </>
+                                                    )}
+
+                                                    <div className="flex items-center gap-2">
+                                                        <p className="text-sm text-velvet-rose font-bold">
+                                                            {formatPrice(service.price)}
+                                                        </p>
+                                                        {service.compare_at_price && service.compare_at_price > service.price && (
+                                                            <>
+                                                                <p className="text-[10px] text-[var(--muted)] line-through">
+                                                                    {formatPrice(service.compare_at_price)}
+                                                                </p>
+                                                                <span className="text-[10px] font-bold text-green-600 bg-green-50 dark:bg-green-900/20 px-1.5 py-0.5 rounded-full">
+                                                                    {Math.round(((service.compare_at_price - service.price) / service.compare_at_price) * 100)}% OFF
+                                                                </span>
+                                                            </>
+                                                        )}
+                                                        <span className="text-[var(--muted)] text-xs">•</span>
+                                                        <p className="text-xs text-[var(--muted)]">
+                                                            {formatDuration(service.duration_minutes)}
+                                                        </p>
+                                                    </div>
+                                                </div>
+                                                {isSelected ? (
+                                                    <button
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            handleRemoveService(service.id);
+                                                        }}
+                                                        className="p-2 bg-red-500/10 text-red-500 rounded-xl hover:bg-red-500/20 transition-colors"
+                                                    >
+                                                        <Minus className="w-5 h-5" />
+                                                    </button>
                                                 ) : (
-                                                    <span className="text-xl">✂️</span>
+                                                    <button
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            handleAddService(service);
+                                                        }}
+                                                        className="p-2 bg-velvet-rose/10 text-velvet-rose rounded-xl hover:bg-velvet-rose/20 transition-colors"
+                                                    >
+                                                        <Plus className="w-5 h-5" />
+                                                    </button>
                                                 )}
                                             </div>
-                                            <div className="flex-1">
-                                                <h3 className="font-semibold">{service.name}</h3>
-                                                <p className="text-sm text-[var(--muted)]">
-                                                    {formatDuration(service.duration_minutes)} • {formatPrice(service.price)}
-                                                </p>
-                                            </div>
-                                            {isSelected ? (
-                                                <button
-                                                    onClick={(e) => {
-                                                        e.stopPropagation();
-                                                        handleRemoveService(service.id);
-                                                    }}
-                                                    className="p-2 bg-red-500/10 text-red-500 rounded-xl hover:bg-red-500/20 transition-colors"
-                                                >
-                                                    <Minus className="w-5 h-5" />
-                                                </button>
-                                            ) : (
-                                                <button
-                                                    onClick={(e) => {
-                                                        e.stopPropagation();
-                                                        handleAddService(service);
-                                                    }}
-                                                    className="p-2 bg-velvet-rose/10 text-velvet-rose rounded-xl hover:bg-velvet-rose/20 transition-colors"
-                                                >
-                                                    <Plus className="w-5 h-5" />
-                                                </button>
-                                            )}
-                                        </motion.div>
-                                    );
-                                })}
+                                        );
+                                    })}
                             </div>
                         </motion.div>
                     )}
@@ -421,11 +559,24 @@ function BookingContent() {
                                     <ShoppingBag className="w-5 h-5 text-velvet-rose" />
                                     <span className="font-semibold text-sm">Your Services ({booking.services.length})</span>
                                 </div>
-                                <div className="space-y-1 text-sm">
-                                    {booking.services.map(s => (
-                                        <div key={s.id} className="flex justify-between text-[var(--muted)]">
-                                            <span>{s.name}</span>
-                                            <span>{formatPrice(s.price)}</span>
+                                <div className="space-y-2">
+                                    {booking.services.map(service => (
+                                        <div key={service.id} className="flex items-center gap-2 text-sm">
+                                            <div className="w-1.5 h-1.5 rounded-full bg-velvet-rose" />
+                                            <div className="flex-1">
+                                                <span className="font-medium">{service.name}</span>
+                                                {/* Show included services for combos */}
+                                                {service.is_combo && service.included_services && service.included_services.length > 0 && (
+                                                    <div className="flex flex-wrap gap-1 mt-0.5">
+                                                        {service.included_services.map((s, i) => (
+                                                            <span key={i} className="text-[10px] text-purple-600 dark:text-purple-400">
+                                                                + {s.name}
+                                                            </span>
+                                                        ))}
+                                                    </div>
+                                                )}
+                                            </div>
+                                            <span className="text-[var(--muted)] text-xs">{formatPrice(service.price)}</span>
                                         </div>
                                     ))}
                                     <div className="flex justify-between pt-2 border-t border-velvet-rose/20 font-medium">
@@ -551,10 +702,25 @@ function BookingContent() {
                                                 <span className="text-lg">✂️</span>
                                             </div>
                                             <div className="flex-1">
-                                                <p className="font-medium text-sm">{service.name}</p>
-                                                <p className="text-xs text-[var(--muted)]">{formatDuration(service.duration_minutes)}</p>
+                                                <h3 className="font-semibold text-sm mb-1">{service.name}</h3>
+                                                {/* Show included services for combos */}
+                                                {service.is_combo && service.included_services && service.included_services.length > 0 && (
+                                                    <div className="flex flex-wrap gap-1 mb-1">
+                                                        {service.included_services.map((s, i) => (
+                                                            <span key={i} className="text-[10px] text-purple-600 dark:text-purple-400">
+                                                                + {s.name}
+                                                            </span>
+                                                        ))}
+                                                    </div>
+                                                )}
+                                                <div className="flex items-center gap-3 text-xs text-[var(--muted)]">
+                                                    <span className="flex items-center gap-1">
+                                                        <Clock className="w-3 h-3" />
+                                                        {formatDuration(service.duration_minutes)}
+                                                    </span>
+                                                    <span className="font-semibold text-[var(--foreground)]">{formatPrice(service.price)}</span>
+                                                </div>
                                             </div>
-                                            <span className="font-medium text-sm">{formatPrice(service.price)}</span>
                                         </div>
                                     ))}
                                 </div>
@@ -594,13 +760,24 @@ function BookingContent() {
                                     onChange={(e) => setBooking(prev => ({ ...prev, userName: e.target.value }))}
                                     className="input-field"
                                 />
-                                <input
-                                    type="tel"
-                                    placeholder="Phone Number"
-                                    value={booking.userPhone}
-                                    onChange={(e) => setBooking(prev => ({ ...prev, userPhone: e.target.value }))}
-                                    className="input-field"
-                                />
+                                <div>
+                                    <input
+                                        type="tel"
+                                        placeholder="Phone Number (10 digits)"
+                                        value={booking.userPhone}
+                                        onChange={(e) => {
+                                            const value = e.target.value.replace(/\D/g, '').slice(0, 10);
+                                            setBooking(prev => ({ ...prev, userPhone: value }));
+                                        }}
+                                        className={`input-field ${booking.userPhone.length > 0 && (booking.userPhone.length !== 10 || !/^[6-9]/.test(booking.userPhone)) ? 'border-red-500 focus:border-red-500' : ''}`}
+                                    />
+                                    {booking.userPhone.length > 0 && booking.userPhone.length !== 10 && (
+                                        <p className="text-xs text-red-500 mt-1">Phone number must be 10 digits</p>
+                                    )}
+                                    {booking.userPhone.length === 10 && !/^[6-9]/.test(booking.userPhone) && (
+                                        <p className="text-xs text-red-500 mt-1">Please enter a valid Indian phone number</p>
+                                    )}
+                                </div>
                                 <input
                                     type="email"
                                     placeholder="Email (optional)"
@@ -613,7 +790,7 @@ function BookingContent() {
                             {/* Confirm Button */}
                             <button
                                 onClick={handleConfirmBooking}
-                                disabled={!booking.userName || !booking.userPhone || submitting}
+                                disabled={!booking.userName || booking.userPhone.length !== 10 || !/^[6-9]/.test(booking.userPhone) || submitting}
                                 className="btn-primary w-full"
                             >
                                 {submitting ? (
@@ -632,27 +809,29 @@ function BookingContent() {
             </div>
 
             {/* Sticky Bottom Bar for Step 1 */}
-            {booking.step === 1 && booking.services.length > 0 && (
-                <motion.div
-                    initial={{ y: 100 }}
-                    animate={{ y: 0 }}
-                    className="fixed bottom-16 left-0 right-0 z-40 bg-white dark:bg-velvet-dark border-t border-[var(--card-border)] p-4 shadow-lg"
-                >
-                    <div className="max-w-lg mx-auto">
-                        <div className="flex items-center justify-between mb-3">
-                            <div>
-                                <p className="font-semibold">{booking.services.length} service{booking.services.length > 1 ? 's' : ''} selected</p>
-                                <p className="text-sm text-[var(--muted)]">{formatDuration(totalDuration)} • {formatPrice(totalPrice)}</p>
+            {
+                booking.step === 1 && booking.services.length > 0 && (
+                    <motion.div
+                        initial={{ y: 100 }}
+                        animate={{ y: 0 }}
+                        className="fixed bottom-16 left-0 right-0 z-40 bg-white dark:bg-velvet-dark border-t border-[var(--card-border)] p-4 shadow-lg"
+                    >
+                        <div className="max-w-lg mx-auto">
+                            <div className="flex items-center justify-between mb-3">
+                                <div>
+                                    <p className="font-semibold">{booking.services.length} service{booking.services.length > 1 ? 's' : ''} selected</p>
+                                    <p className="text-sm text-[var(--muted)]">{formatDuration(totalDuration)} • {formatPrice(totalPrice)}</p>
+                                </div>
                             </div>
+                            <button onClick={handleContinueToStep2} className="btn-primary w-full">
+                                Continue
+                                <ChevronRight className="w-5 h-5" />
+                            </button>
                         </div>
-                        <button onClick={handleContinueToStep2} className="btn-primary w-full">
-                            Continue
-                            <ChevronRight className="w-5 h-5" />
-                        </button>
-                    </div>
-                </motion.div>
-            )}
-        </div>
+                    </motion.div>
+                )
+            }
+        </div >
     );
 }
 

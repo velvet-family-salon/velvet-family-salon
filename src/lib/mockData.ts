@@ -14,6 +14,8 @@ export const mockServices: Service[] = [
         is_active: true,
         sort_order: 1,
         created_at: new Date().toISOString(),
+        is_combo: false,
+        is_featured: false,
     },
     {
         id: '2',
@@ -26,6 +28,8 @@ export const mockServices: Service[] = [
         is_active: true,
         sort_order: 2,
         created_at: new Date().toISOString(),
+        is_combo: false,
+        is_featured: false,
     },
     {
         id: '3',
@@ -38,6 +42,8 @@ export const mockServices: Service[] = [
         is_active: true,
         sort_order: 3,
         created_at: new Date().toISOString(),
+        is_combo: false,
+        is_featured: false,
     },
     {
         id: '4',
@@ -50,6 +56,8 @@ export const mockServices: Service[] = [
         is_active: true,
         sort_order: 4,
         created_at: new Date().toISOString(),
+        is_combo: false,
+        is_featured: false,
     },
     {
         id: '5',
@@ -62,6 +70,8 @@ export const mockServices: Service[] = [
         is_active: true,
         sort_order: 5,
         created_at: new Date().toISOString(),
+        is_combo: false,
+        is_featured: false,
     },
     {
         id: '6',
@@ -74,6 +84,8 @@ export const mockServices: Service[] = [
         is_active: true,
         sort_order: 6,
         created_at: new Date().toISOString(),
+        is_combo: false,
+        is_featured: false,
     },
     {
         id: '7',
@@ -86,6 +98,8 @@ export const mockServices: Service[] = [
         is_active: true,
         sort_order: 7,
         created_at: new Date().toISOString(),
+        is_combo: false,
+        is_featured: false,
     },
     {
         id: '8',
@@ -98,6 +112,8 @@ export const mockServices: Service[] = [
         is_active: true,
         sort_order: 8,
         created_at: new Date().toISOString(),
+        is_combo: false,
+        is_featured: false,
     },
     {
         id: '9',
@@ -110,6 +126,8 @@ export const mockServices: Service[] = [
         is_active: true,
         sort_order: 9,
         created_at: new Date().toISOString(),
+        is_combo: false,
+        is_featured: false,
     },
     {
         id: '10',
@@ -122,6 +140,8 @@ export const mockServices: Service[] = [
         is_active: true,
         sort_order: 10,
         created_at: new Date().toISOString(),
+        is_combo: false,
+        is_featured: false,
     },
 ];
 
@@ -193,6 +213,7 @@ export const mockAppointments: Appointment[] = [
         final_amount: null,
         payment_mode: null,
         created_at: new Date().toISOString(),
+        discount_percent: null,
     },
     {
         id: '2',
@@ -207,5 +228,6 @@ export const mockAppointments: Appointment[] = [
         final_amount: null,
         payment_mode: null,
         created_at: new Date().toISOString(),
+        discount_percent: null,
     },
 ];

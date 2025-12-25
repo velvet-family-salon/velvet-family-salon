@@ -1,33 +1,60 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Eye, EyeOff, Lock, LogIn } from 'lucide-react';
+import { Eye, EyeOff, LogIn, Loader2 } from 'lucide-react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { useAuth } from '@/context/AuthContext';
 
 export default function AdminLoginPage() {
     const router = useRouter();
+    const { signIn, user, loading } = useAuth();
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [showPassword, setShowPassword] = useState(false);
-    const [loading, setLoading] = useState(false);
+    const [submitting, setSubmitting] = useState(false);
     const [error, setError] = useState('');
+
+    // Redirect if already logged in - must be in useEffect to avoid setState during render
+    useEffect(() => {
+        if (!loading && user) {
+            router.push('/admin/dashboard');
+        }
+    }, [loading, user, router]);
+
+    // Show loading while checking auth state
+    if (loading) {
+        return (
+            <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-velvet-black via-velvet-dark to-velvet-black">
+                <Loader2 className="w-8 h-8 text-gold animate-spin" />
+            </div>
+        );
+    }
+
+    // If user is logged in, show loading while redirecting
+    if (user) {
+        return (
+            <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-velvet-black via-velvet-dark to-velvet-black">
+                <Loader2 className="w-8 h-8 text-gold animate-spin" />
+            </div>
+        );
+    }
 
     const handleLogin = async (e: React.FormEvent) => {
         e.preventDefault();
-        setLoading(true);
+        setSubmitting(true);
         setError('');
 
-        // Demo login - in production, this would use Supabase Auth
-        if (email === 'admin@velvet.com' && password === 'admin123') {
-            localStorage.setItem('adminLoggedIn', 'true');
-            router.push('/admin/dashboard');
+        const result = await signIn(email, password);
+
+        if (result.error) {
+            setError(result.error);
+            setSubmitting(false);
         } else {
-            setError('Invalid email or password');
+            router.push('/admin/dashboard');
         }
-        setLoading(false);
     };
 
     return (
@@ -64,7 +91,7 @@ export default function AdminLoginPage() {
                             type="email"
                             value={email}
                             onChange={(e) => setEmail(e.target.value)}
-                            placeholder="admin@velvet.com"
+                            placeholder="admin@velvetfamilysalon.com"
                             className="w-full bg-velvet-dark border border-velvet-gray rounded-xl py-3 px-4 text-white placeholder:text-velvet-gray focus:outline-none focus:ring-2 focus:ring-gold/50 focus:border-gold transition-all"
                             required
                         />
@@ -89,14 +116,19 @@ export default function AdminLoginPage() {
                                 {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
                             </button>
                         </div>
+                        <div className="mt-2 text-right">
+                            <Link href="/admin/forgot-password" className="text-gold text-sm hover:text-gold/80 transition-colors">
+                                Forgot password?
+                            </Link>
+                        </div>
                     </div>
 
                     <button
                         type="submit"
-                        disabled={loading}
+                        disabled={submitting || loading}
                         className="btn-primary w-full"
                     >
-                        {loading ? (
+                        {submitting ? (
                             <div className="w-5 h-5 border-2 border-velvet-black border-t-transparent rounded-full animate-spin" />
                         ) : (
                             <>
@@ -107,11 +139,13 @@ export default function AdminLoginPage() {
                     </button>
                 </form>
 
-                {/* Demo Credentials */}
+                {/* Security Notice */}
                 <div className="mt-6 p-4 rounded-xl bg-gold/5 border border-gold/20">
-                    <p className="text-beige-300 text-sm text-center mb-2">Demo Credentials</p>
-                    <p className="text-beige-400 text-xs text-center font-mono">
-                        admin@velvet.com / admin123
+                    <p className="text-beige-400 text-xs text-center">
+                        🔒 Secured with Supabase Authentication
+                    </p>
+                    <p className="text-beige-500 text-xs text-center mt-1">
+                        Session expires after 30 minutes of inactivity
                     </p>
                 </div>
 

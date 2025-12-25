@@ -1,11 +1,11 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
     ArrowLeft, Calendar, Clock, User, ChevronRight, AlertCircle,
     Phone, Search, Sparkles, IndianRupee, Heart, CalendarCheck,
-    RefreshCw, X, CreditCard, Wallet, Banknote, Footprints
+    RefreshCw, X, CreditCard, Wallet, Banknote, Footprints, Star
 } from 'lucide-react';
 import Link from 'next/link';
 import { getAppointmentsByPhone, getUserByPhone, getCustomerStats, CustomerStats } from '@/lib/db';
@@ -211,7 +211,7 @@ export default function HistoryPage() {
                             className="space-y-6"
                         >
                             {/* Customer Not Found */}
-                            {!customerName && (
+                            {(!customerName && !isSearching) ? (
                                 <div className="text-center py-12">
                                     <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-[var(--card-bg)] flex items-center justify-center">
                                         <AlertCircle className="w-8 h-8 text-[var(--muted)]" />
@@ -226,10 +226,10 @@ export default function HistoryPage() {
                                         <ChevronRight className="w-4 h-4" />
                                     </Link>
                                 </div>
-                            )}
+                            ) : null}
 
                             {/* Customer Found */}
-                            {customerName && (
+                            {customerName ? (
                                 <>
                                     {/* Welcome Card */}
                                     <motion.div
@@ -241,11 +241,11 @@ export default function HistoryPage() {
                                             <div>
                                                 <p className="text-sm text-[var(--muted)] mb-1">Welcome back,</p>
                                                 <h2 className="text-xl font-display font-semibold">{customerName}</h2>
-                                                {memberSince && (
+                                                {memberSince ? (
                                                     <p className="text-xs text-[var(--muted)] mt-1">
                                                         Member since {new Date(memberSince).toLocaleDateString('en-IN', { month: 'long', year: 'numeric' })}
                                                     </p>
-                                                )}
+                                                ) : null}
                                             </div>
                                             <div className="w-12 h-12 rounded-full bg-gradient-to-br from-velvet-rose to-velvet-rose/70 flex items-center justify-center text-velvet-black text-xl font-semibold">
                                                 {customerName.charAt(0).toUpperCase()}
@@ -254,8 +254,20 @@ export default function HistoryPage() {
                                     </motion.div>
 
                                     {/* Stats Grid */}
-                                    {stats && (
-                                        <div className="grid grid-cols-2 gap-3">
+                                    {stats ? (
+                                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                                            <motion.div
+                                                initial={{ opacity: 0, y: 20 }}
+                                                animate={{ opacity: 1, y: 0 }}
+                                                className="card p-4 text-center"
+                                            >
+                                                <div className="w-10 h-10 mx-auto mb-2 rounded-full bg-velvet-rose/10 flex items-center justify-center">
+                                                    <Calendar className="w-5 h-5 text-velvet-rose" />
+                                                </div>
+                                                <p className="text-xl font-bold">{stats.totalVisits}</p>
+                                                <p className="text-xs text-[var(--muted)]">Total Visits</p>
+                                            </motion.div>
+
                                             <motion.div
                                                 initial={{ opacity: 0, y: 20 }}
                                                 animate={{ opacity: 1, y: 0 }}
@@ -263,41 +275,33 @@ export default function HistoryPage() {
                                                 className="card p-4 text-center"
                                             >
                                                 <div className="w-10 h-10 mx-auto mb-2 rounded-full bg-green-500/10 flex items-center justify-center">
-                                                    <CalendarCheck className="w-5 h-5 text-green-500" />
+                                                    <IndianRupee className="w-5 h-5 text-green-500" />
                                                 </div>
-                                                <p className="text-2xl font-bold text-green-500">{stats.totalVisits}</p>
-                                                <p className="text-xs text-[var(--muted)]">Total Visits</p>
-                                            </motion.div>
-
-                                            <motion.div
-                                                initial={{ opacity: 0, y: 20 }}
-                                                animate={{ opacity: 1, y: 0 }}
-                                                transition={{ delay: 0.15 }}
-                                                className="card p-4 text-center"
-                                            >
-                                                <div className="w-10 h-10 mx-auto mb-2 rounded-full bg-velvet-rose/10 flex items-center justify-center">
-                                                    <IndianRupee className="w-5 h-5 text-velvet-rose" />
-                                                </div>
-                                                <p className="text-2xl font-bold text-velvet-rose">{formatPrice(stats.totalSpent)}</p>
+                                                <p className="text-xl font-bold">{formatPrice(stats.totalSpent)}</p>
                                                 <p className="text-xs text-[var(--muted)]">Total Spent</p>
+                                                {stats.totalSavings > 0 ? (
+                                                    <div className="mt-2 pt-2 border-t border-green-500/20">
+                                                        <p className="text-sm font-bold text-green-600">💰 {formatPrice(stats.totalSavings)} saved</p>
+                                                    </div>
+                                                ) : null}
                                             </motion.div>
 
-                                            {stats.favouriteService && (
+                                            {stats.favouriteService ? (
                                                 <motion.div
                                                     initial={{ opacity: 0, y: 20 }}
                                                     animate={{ opacity: 1, y: 0 }}
                                                     transition={{ delay: 0.2 }}
                                                     className="card p-4 text-center"
                                                 >
-                                                    <div className="w-10 h-10 mx-auto mb-2 rounded-full bg-pink-500/10 flex items-center justify-center">
-                                                        <Heart className="w-5 h-5 text-pink-500" />
+                                                    <div className="w-10 h-10 mx-auto mb-2 rounded-full bg-orange-500/10 flex items-center justify-center">
+                                                        <Star className="w-5 h-5 text-orange-500" />
                                                     </div>
                                                     <p className="text-sm font-semibold line-clamp-1">{stats.favouriteService}</p>
                                                     <p className="text-xs text-[var(--muted)]">Favourite Service</p>
                                                 </motion.div>
-                                            )}
+                                            ) : null}
 
-                                            {stats.lastVisit && (
+                                            {stats.lastVisit ? (
                                                 <motion.div
                                                     initial={{ opacity: 0, y: 20 }}
                                                     animate={{ opacity: 1, y: 0 }}
@@ -310,9 +314,10 @@ export default function HistoryPage() {
                                                     <p className="text-sm font-semibold">{formatDate(stats.lastVisit)}</p>
                                                     <p className="text-xs text-[var(--muted)]">Last Visit</p>
                                                 </motion.div>
-                                            )}
+                                            ) : null}
+
                                         </div>
-                                    )}
+                                    ) : null}
 
                                     {/* Filter Tabs */}
                                     <div className="flex gap-2 p-1 bg-[var(--card-bg)] rounded-xl">
@@ -371,17 +376,17 @@ export default function HistoryPage() {
                                                     ? "You don't have any upcoming appointments"
                                                     : "No past appointments to show"}
                                             </p>
-                                            {filter === 'upcoming' && (
+                                            {filter === 'upcoming' ? (
                                                 <Link href="/book" className="btn-primary inline-flex items-center gap-2">
                                                     Book Now
                                                     <ChevronRight className="w-4 h-4" />
                                                 </Link>
-                                            )}
+                                            ) : null}
                                         </motion.div>
                                     )}
 
                                     {/* Quick Book Again CTA */}
-                                    {stats && stats.totalVisits > 0 && (
+                                    {stats && stats.totalVisits > 0 ? (
                                         <motion.div
                                             initial={{ opacity: 0, y: 20 }}
                                             animate={{ opacity: 1, y: 0 }}
@@ -398,15 +403,27 @@ export default function HistoryPage() {
                                                 </Link>
                                             </div>
                                         </motion.div>
-                                    )}
+                                    ) : null}
                                 </>
-                            )}
+                            ) : null}
                         </motion.div>
                     )}
                 </AnimatePresence>
             </div>
         </div>
     );
+}
+
+// Helper to render cancellation reason safely
+function RenderCancellationReason({ svc }: { svc: { is_completed: boolean; cancellation_reason?: string | null } }) {
+    if (!svc.is_completed && svc.cancellation_reason) {
+        return (
+            <div className="text-[10px] text-red-500 italic ml-2">
+                {svc.cancellation_reason}
+            </div>
+        );
+    }
+    return null;
 }
 
 // Appointment Card Component
@@ -421,19 +438,36 @@ function AppointmentCard({ apt, index }: { apt: Appointment & { allServices?: Ap
     // Get all services to display
     const services = apt.allServices && apt.allServices.length > 0
         ? apt.allServices
-        : [{ service: apt.service, id: apt.service_id }];
+        : [{ service: apt.service, id: apt.service_id, is_completed: true }];
 
     const hasMultipleServices = services.length > 1;
 
-    // Calculate total price
+    // Calculate total price based on COMPLETED services only
     const totalPrice = apt.final_amount || (
         apt.allServices && apt.allServices.length > 0
-            ? apt.allServices.reduce((sum, s) => sum + (s.service?.price || 0), 0)
+            ? apt.allServices.filter(s => s.is_completed).reduce((sum, s) => sum + (s.service?.price || 0), 0)
             : apt.service?.price || 0
     );
 
     // Get first service image for thumbnail
     const thumbnailImage = services[0]?.service?.image_url;
+
+    // Financial calculations for the footer
+    const completedServices = apt.allServices && apt.allServices.length > 0
+        ? apt.allServices.filter(s => s.is_completed)
+        : [];
+    const originalTotal = completedServices.length > 0
+        ? completedServices.reduce((sum, s) => sum + (s.service?.price || 0), 0)
+        : (services[0]?.service?.price || 0);
+
+    const hasDiscount = apt.status === 'completed' && apt.discount_percent && apt.discount_percent > 0;
+    const savings = hasDiscount ? Math.round(originalTotal * (apt.discount_percent! / 100)) : 0;
+
+    const firstService = services[0]?.service;
+    const isComboAndDiscounted = !hasMultipleServices &&
+        firstService?.is_combo &&
+        firstService?.compare_at_price &&
+        firstService.compare_at_price > firstService.price;
 
     return (
         <motion.div
@@ -482,15 +516,15 @@ function AppointmentCard({ apt, index }: { apt: Appointment & { allServices?: Ap
                             <h3 className="font-semibold line-clamp-1">
                                 {hasMultipleServices
                                     ? `${services.length} Services`
-                                    : services[0]?.service?.name || 'Service'
+                                    : (services[0]?.service?.name || 'Service')
                                 }
                             </h3>
-                            {isWalkIn && (
+                            {isWalkIn ? (
                                 <span className="text-[10px] px-1.5 py-0.5 bg-purple-500/10 text-purple-600 dark:text-purple-400 rounded font-medium flex items-center gap-0.5 flex-shrink-0">
                                     <Footprints className="w-3 h-3" />
                                     Walk-In
                                 </span>
-                            )}
+                            ) : null}
                         </div>
                         <span className={`text-xs px-2 py-0.5 rounded-full capitalize flex-shrink-0 ${statusColors[apt.status]}`}>
                             {apt.status}
@@ -498,16 +532,30 @@ function AppointmentCard({ apt, index }: { apt: Appointment & { allServices?: Ap
                     </div>
 
                     {/* Multiple Services List */}
-                    {hasMultipleServices && (
+                    {hasMultipleServices ? (
                         <div className="mb-2 space-y-1">
                             {services.map((svc, i) => (
-                                <div key={i} className="text-xs text-[var(--muted)] flex items-center gap-1">
-                                    <span className="w-1 h-1 rounded-full bg-velvet-rose"></span>
-                                    {svc.service?.name}
+                                <div key={i} className="flex flex-col gap-0.5">
+                                    <div className={`text-xs flex items-center gap-1 ${!svc.is_completed ? "line-through text-[var(--muted)]" : "text-[var(--muted)]"}`}>
+                                        <span className={`w-1 h-1 rounded-full ${!svc.is_completed ? 'bg-gray-300' : 'bg-velvet-rose'}`}></span>
+                                        {svc.service?.name}
+                                    </div>
+                                    <RenderCancellationReason svc={svc} />
                                 </div>
                             ))}
                         </div>
-                    )}
+                    ) : null}
+
+                    {/* Included Services for Combo (if single combo service) */}
+                    {!hasMultipleServices && firstService?.is_combo && firstService?.included_services && firstService.included_services.length > 0 ? (
+                        <div className="mb-2 flex flex-wrap gap-1">
+                            {firstService.included_services.map((item: any) => (
+                                <span key={item.id} className="text-[10px] px-1.5 py-0.5 rounded-full bg-purple-50 dark:bg-purple-900/20 text-purple-700 dark:text-purple-300 border border-purple-100 dark:border-purple-800/50">
+                                    + {item.name}
+                                </span>
+                            ))}
+                        </div>
+                    ) : null}
 
                     {/* Date, Time, Staff */}
                     <div className="space-y-1 text-sm text-[var(--muted)]">
@@ -519,36 +567,72 @@ function AppointmentCard({ apt, index }: { apt: Appointment & { allServices?: Ap
                             <Clock className="w-4 h-4" />
                             <span>{formatTime(apt.start_time)}</span>
                         </div>
-                        {apt.staff && (
+                        {apt.staff ? (
                             <div className="flex items-center gap-2">
                                 <User className="w-4 h-4" />
                                 <span>{apt.staff.name}</span>
                             </div>
-                        )}
+                        ) : null}
                     </div>
 
                     {/* Footer with Price and Actions */}
-                    <div className="flex items-center justify-between mt-3 pt-3 border-t border-[var(--card-border)]">
-                        <div className="flex items-center gap-2">
-                            <span className="font-semibold text-velvet-rose">
-                                {formatPrice(totalPrice)}
-                            </span>
-                            {apt.payment_mode && (
-                                <span className="text-xs px-2 py-0.5 rounded-full bg-[var(--card-bg)] text-[var(--muted)] flex items-center gap-1 capitalize">
-                                    {paymentIcons[apt.payment_mode]}
-                                    {apt.payment_mode}
+                    <div className="mt-3 pt-3 border-t border-[var(--card-border)]">
+                        {/* Discount info for completed appointments */}
+                        {hasDiscount ? (
+                            <div className="space-y-1 mb-2 text-sm">
+                                <div className="flex justify-between text-[var(--muted)]">
+                                    <span>Subtotal</span>
+                                    <span>{formatPrice(originalTotal)}</span>
+                                </div>
+                                <div className="flex justify-between text-green-600 font-medium">
+                                    <span>💰 You Saved ({apt.discount_percent}%)</span>
+                                    <span>-{formatPrice(savings)}</span>
+                                </div>
+                            </div>
+                        ) : null}
+
+                        {/* Offer details for combo services (even if not completed) */}
+                        {isComboAndDiscounted ? (
+                            <div className="space-y-1 mb-2 text-sm">
+                                <div className="flex items-center gap-2 mb-1">
+                                    <span className="text-[10px] font-bold bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 px-2 py-0.5 rounded-full">
+                                        {Math.round(((firstService.compare_at_price! - firstService.price) / firstService.compare_at_price!) * 100)}% OFF
+                                    </span>
+                                    <span className="text-[10px] text-[var(--muted)]">Special Offer</span>
+                                </div>
+                                <div className="flex justify-between text-[var(--muted)]">
+                                    <span>Original Price</span>
+                                    <span className="line-through">{formatPrice(firstService.compare_at_price!)}</span>
+                                </div>
+                                <div className="flex justify-between text-green-600 font-medium">
+                                    <span>You Save</span>
+                                    <span>-{formatPrice(firstService.compare_at_price! - firstService.price)}</span>
+                                </div>
+                            </div>
+                        ) : null}
+
+                        <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                                <span className="font-semibold text-velvet-rose">
+                                    {formatPrice(totalPrice)}
                                 </span>
-                            )}
+                                {apt.payment_mode ? (
+                                    <span className="text-xs px-2 py-0.5 rounded-full bg-[var(--card-bg)] text-[var(--muted)] flex items-center gap-1 capitalize">
+                                        {paymentIcons[apt.payment_mode]}
+                                        {apt.payment_mode}
+                                    </span>
+                                ) : null}
+                            </div>
+                            {apt.status === 'completed' ? (
+                                <Link
+                                    href="/book"
+                                    className="text-sm text-velvet-rose hover:underline flex items-center gap-1"
+                                >
+                                    Book Again
+                                    <ChevronRight className="w-3 h-3" />
+                                </Link>
+                            ) : null}
                         </div>
-                        {apt.status === 'completed' && (
-                            <Link
-                                href="/book"
-                                className="text-sm text-velvet-rose hover:underline flex items-center gap-1"
-                            >
-                                Book Again
-                                <ChevronRight className="w-3 h-3" />
-                            </Link>
-                        )}
                     </div>
                 </div>
             </div>

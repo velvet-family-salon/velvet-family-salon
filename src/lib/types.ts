@@ -1,6 +1,6 @@
 // Database types matching Supabase schema
 
-export type ServiceCategory = 'men' | 'women' | 'unisex';
+export type ServiceCategory = 'men' | 'women' | 'unisex' | 'combo';
 export type AppointmentStatus = 'pending' | 'confirmed' | 'cancelled' | 'completed';
 
 export interface Service {
@@ -13,6 +13,12 @@ export interface Service {
     image_url: string | null;
     is_active: boolean;
     sort_order: number;
+    // New fields for Combos & Offers
+    compare_at_price?: number | null; // Original price before discount
+    is_combo: boolean;
+    is_featured: boolean;
+    offer_end_at?: string | null; // ISO Date string
+    included_services?: { id: string; name: string }[]; // For combos
     created_at: string;
 }
 
@@ -58,6 +64,7 @@ export interface Appointment {
     status: AppointmentStatus;
     notes: string | null;
     final_amount: number | null;
+    discount_percent: number | null; // Discount percentage applied
     payment_mode: 'cash' | 'upi' | 'card' | null;
     created_at: string;
     // Joined data
@@ -100,6 +107,7 @@ export interface AppointmentService {
     service_id: string;
     staff_id: string | null;
     is_completed: boolean;
+    cancellation_reason: string | null; // Reason why service wasn't completed
     final_price: number | null;
     created_at: string;
     // Joined data
@@ -123,5 +131,30 @@ export interface ReviewsConfig {
     average_rating: number; // 1.0 - 5.0
     total_reviews_count: number;
     updated_at: string;
+}
+
+export interface BillService {
+    name: string;
+    price: number;
+}
+
+export interface Bill {
+    id: string;
+    bill_number: string;
+    appointment_id: string | null;
+    customer_name: string;
+    customer_phone: string | null;
+    customer_email: string | null;
+    bill_date: string;
+    bill_time: string;
+    services: BillService[];
+    subtotal: number;
+    discount_percent: number;
+    discount_amount: number;
+    final_amount: number;
+    payment_mode: 'cash' | 'upi' | 'card' | null;
+    staff_name: string | null;
+    notes: string | null;
+    created_at: string;
 }
 

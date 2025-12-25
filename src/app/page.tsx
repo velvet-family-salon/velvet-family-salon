@@ -6,13 +6,15 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { Scissors, Star, Clock, MapPin, Phone, MessageCircle, ChevronRight, Sparkles, Loader2, ChevronLeft } from 'lucide-react';
 import { formatPrice, SALON_CONFIG, getWhatsAppLink, getCallLink } from '@/lib/utils';
-import { getServices, getReviewsConfig, getStaff } from '@/lib/db';
+import { getServices, getReviewsConfig, getStaff, getMostBookedServices } from '@/lib/db';
 import { Service, ReviewsConfig, Staff } from '@/lib/types';
 import { ServiceCard } from '@/components/ui/ServiceCard';
+import { ComboCard } from '@/components/services/ComboCard';
 import { QuickActions } from '@/components/ui/QuickActions';
 import { ReviewsSection } from '@/components/ui/ReviewsSection';
 import { useTheme } from '@/components/providers/ThemeProvider';
 import { Moon, Sun } from 'lucide-react';
+import { InstallButton, HomePageInstallBanner } from '@/components/ui/PWAInstallPrompt';
 
 // Animation variants
 const fadeInUp = {
@@ -31,12 +33,25 @@ const staggerContainer = {
 export default function HomePage() {
     const { theme, toggleTheme } = useTheme();
     const [services, setServices] = useState<Service[]>([]);
+    const [popularServices, setPopularServices] = useState<Service[]>([]);
     const [staff, setStaff] = useState<Staff[]>([]);
     const [reviewsConfig, setReviewsConfig] = useState<ReviewsConfig | null>(null);
     const [loading, setLoading] = useState(true);
+    const [offerIndex, setOfferIndex] = useState(0);
     const [staffIndex, setStaffIndex] = useState(0);
     const [taglineIndex, setTaglineIndex] = useState(0);
     const [heroImageIndex, setHeroImageIndex] = useState(0);
+    const [showInstallBanner, setShowInstallBanner] = useState(true);
+
+    // Auto-slide offers
+    useEffect(() => {
+        const offersCount = services.filter(s => s.is_combo || (s.compare_at_price && s.compare_at_price > s.price)).length;
+        if (offersCount <= 1) return;
+        const interval = setInterval(() => {
+            setOfferIndex((prev) => (prev + 1) % offersCount);
+        }, 5000);
+        return () => clearInterval(interval);
+    }, [services]);
 
     // Hero background images
     const heroImages = [
@@ -67,14 +82,24 @@ export default function HomePage() {
 
     useEffect(() => {
         async function loadData() {
-            const [servicesData, configData, staffData] = await Promise.all([
+
+            const [servicesData, popularServicesData, configData, staffData] = await Promise.all([
                 getServices(),
+                getMostBookedServices(4),
                 getReviewsConfig(),
                 getStaff(),
             ]);
-            setServices(servicesData.slice(0, 4)); // Get first 4 for featured
+            setServices(servicesData);
+
+            // If most booked returns empty, fallback to the first 4 active services
+            if (popularServicesData.length === 0) {
+                setPopularServices(servicesData.slice(0, 4));
+            } else {
+                setPopularServices(popularServicesData);
+            }
+
             setReviewsConfig(configData);
-            setStaff(staffData.filter(s => s.is_active)); // Only active staff
+            setStaff(staffData.filter(s => s.is_active));
             setLoading(false);
         }
         loadData();
@@ -107,24 +132,27 @@ export default function HomePage() {
                 <div className="flex items-center justify-between px-4 py-3 max-w-lg mx-auto">
                     <div className="flex items-center gap-3">
                         <div className="relative w-12 h-12 rounded-full overflow-hidden border-2 border-velvet-rose/20 shadow-md">
-                            <Image src="/logo.jpg" alt="Velvet Family Salon" fill className="object-cover" priority />
+                            <Image src="/logo.jpg" alt="Velvet Family Salon" fill sizes="48px" className="object-cover" priority />
                         </div>
                         <div>
                             <h1 className="font-display text-lg font-semibold leading-tight">Velvet</h1>
                             <p className="text-[10px] text-[var(--muted)] uppercase tracking-wider">Family Salon</p>
                         </div>
                     </div>
-                    <button
-                        onClick={toggleTheme}
-                        className="p-2 rounded-full hover:bg-beige-100 dark:hover:bg-velvet-dark transition-colors"
-                        aria-label="Toggle theme"
-                    >
-                        {theme === 'dark' ? (
-                            <Sun className="w-5 h-5 text-velvet-rose" />
-                        ) : (
-                            <Moon className="w-5 h-5 text-velvet-gray" />
-                        )}
-                    </button>
+                    <div className="flex items-center gap-2">
+                        <InstallButton />
+                        <button
+                            onClick={toggleTheme}
+                            className="p-2 rounded-full hover:bg-beige-100 dark:hover:bg-velvet-dark transition-colors"
+                            aria-label="Toggle theme"
+                        >
+                            {theme === 'dark' ? (
+                                <Sun className="w-5 h-5 text-velvet-rose" />
+                            ) : (
+                                <Moon className="w-5 h-5 text-velvet-gray" />
+                            )}
+                        </button>
+                    </div>
                 </div>
             </header>
 
@@ -229,6 +257,71 @@ export default function HomePage() {
             {/* Quick Actions */}
             <QuickActions />
 
+            {/* Mega Savings Slideshow */}
+            {!loading && services.filter(s => (s.is_combo || (s.compare_at_price && s.compare_at_price > s.price)) && s.is_featured).length > 0 && (
+                <section className="px-4 py-6 max-w-lg mx-auto">
+                    <div className="flex items-center justify-between mb-4">
+                        <h3 className="font-display text-xl font-bold flex items-center gap-2">
+                            <Sparkles className="w-5 h-5 text-gold fill-gold animate-pulse" />
+                            Mega Savings
+                        </h3>
+                        <div className="flex gap-2">
+                            <button
+                                onClick={() => {
+                                    const offers = services.filter(s => (s.is_combo || (s.compare_at_price && s.compare_at_price > s.price)) && s.is_featured);
+                                    setOfferIndex((prev) => (prev - 1 + offers.length) % offers.length);
+                                }}
+                                className="w-8 h-8 rounded-full border border-[var(--card-border)] flex items-center justify-center hover:bg-beige-100 dark:hover:bg-velvet-gray transition-colors"
+                            >
+                                <ChevronLeft className="w-4 h-4" />
+                            </button>
+                            <button
+                                onClick={() => {
+                                    const offers = services.filter(s => (s.is_combo || (s.compare_at_price && s.compare_at_price > s.price)) && s.is_featured);
+                                    setOfferIndex((prev) => (prev + 1) % offers.length);
+                                }}
+                                className="w-8 h-8 rounded-full border border-[var(--card-border)] flex items-center justify-center hover:bg-beige-100 dark:hover:bg-velvet-gray transition-colors"
+                            >
+                                <ChevronRight className="w-4 h-4" />
+                            </button>
+                        </div>
+                    </div>
+
+                    <div className="relative min-h-[170px]">
+                        <AnimatePresence mode="wait">
+                            {services
+                                .filter(s => (s.is_combo || (s.compare_at_price && s.compare_at_price > s.price)) && s.is_featured)
+                                .filter((_, i) => i === offerIndex)
+                                .map((service) => (
+                                    <motion.div
+                                        key={service.id}
+                                        initial={{ opacity: 0, x: 50, scale: 0.9 }}
+                                        animate={{ opacity: 1, x: 0, scale: 1 }}
+                                        exit={{ opacity: 0, x: -50, scale: 0.9 }}
+                                        transition={{ duration: 0.4, ease: "easeOut" }}
+                                        className="w-full flex justify-center"
+                                    >
+                                        <ComboCard service={service} />
+                                    </motion.div>
+                                ))}
+                        </AnimatePresence>
+                    </div>
+
+                    {/* Dots for Offers */}
+                    <div className="flex justify-center gap-1.5 mt-4">
+                        {services
+                            .filter(s => s.is_combo || (s.compare_at_price && s.compare_at_price > s.price))
+                            .map((_, i) => (
+                                <button
+                                    key={i}
+                                    onClick={() => setOfferIndex(i)}
+                                    className={`h-1.5 rounded-full transition-all duration-300 ${i === offerIndex ? 'bg-velvet-rose w-4' : 'bg-[var(--muted)]/30 w-1.5'}`}
+                                />
+                            ))}
+                    </div>
+                </section>
+            )}
+
             {/* Featured Services */}
             <section className="px-4 py-6 max-w-lg mx-auto">
                 <div className="flex items-center justify-between mb-4">
@@ -254,7 +347,7 @@ export default function HomePage() {
                         viewport={{ once: true }}
                         variants={staggerContainer}
                     >
-                        {services.map((service) => (
+                        {popularServices.map((service) => (
                             <motion.div key={service.id} variants={fadeInUp}>
                                 <ServiceCard service={service} compact />
                             </motion.div>
@@ -457,6 +550,11 @@ export default function HomePage() {
                     &copy; {new Date().getFullYear()} Velvet Family Salon. All rights reserved.
                 </p>
             </footer>
+
+            {/* Install App Banner - shows every time home page is visited */}
+            {showInstallBanner && (
+                <HomePageInstallBanner onDismiss={() => setShowInstallBanner(false)} />
+            )}
         </div>
     );
 }
