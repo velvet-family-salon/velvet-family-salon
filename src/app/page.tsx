@@ -91,9 +91,9 @@ export default function HomePage() {
             ]);
             setServices(servicesData);
 
-            // If most booked returns empty, fallback to the first 4 active services
+            // If most booked returns empty, fallback to the first 4 active non-combo services
             if (popularServicesData.length === 0) {
-                setPopularServices(servicesData.slice(0, 4));
+                setPopularServices(servicesData.filter(s => !s.is_combo).slice(0, 4));
             } else {
                 setPopularServices(popularServicesData);
             }

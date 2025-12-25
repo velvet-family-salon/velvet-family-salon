@@ -29,7 +29,7 @@ export async function getMostBookedServices(limit: number = 4): Promise<Service[
 
         if (error || !appointments) {
             console.error('Error fetching appointment stats:', error);
-            return (await getServices()).slice(0, limit);
+            return (await getServices()).filter(s => !s.is_combo).slice(0, limit);
         }
 
         const counts: Record<string, number> = {};
@@ -40,6 +40,7 @@ export async function getMostBookedServices(limit: number = 4): Promise<Service[
         const allServices = await getServices();
 
         return allServices
+            .filter(s => !s.is_combo)
             .sort((a, b) => (counts[b.id] || 0) - (counts[a.id] || 0))
             .slice(0, limit);
     } catch (e) {
