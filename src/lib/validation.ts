@@ -4,10 +4,31 @@
  */
 
 /**
+ * Normalizes Indian phone numbers to a consistent 10-digit format.
+ * Removes +91, 0, spaces, dashes, and other formatting.
+ */
+export function normalizePhone(phone: string): string {
+    // Remove all non-digit characters
+    let normalized = phone.replace(/\D/g, '');
+
+    // Remove leading 91 (country code)
+    if (normalized.startsWith('91') && normalized.length > 10) {
+        normalized = normalized.slice(2);
+    }
+
+    // Remove leading 0
+    if (normalized.startsWith('0') && normalized.length > 10) {
+        normalized = normalized.slice(1);
+    }
+
+    return normalized;
+}
+
+/**
  * Validates Indian phone number format (10 digits starting with 6-9)
  */
 export function validatePhone(phone: string): boolean {
-    const cleaned = phone.replace(/\D/g, '');
+    const cleaned = normalizePhone(phone);
     return /^[6-9]\d{9}$/.test(cleaned);
 }
 
@@ -30,12 +51,53 @@ export function validateEmail(email: string): boolean {
 }
 
 /**
- * Sanitizes text input to prevent XSS - removes HTML tags
+ * P2 FIX: Robust XSS sanitization using HTML entity encoding
+ * BEFORE: Only removed HTML tags with regex (bypassed by many XSS vectors)
+ * AFTER: Encodes all special characters that could be used in XSS attacks
+ * 
+ * XSS payloads that are now blocked:
+ * - <script>alert('xss')</script> → &lt;script&gt;alert('xss')&lt;/script&gt;
+ * - <img src=x onerror=alert('xss')> → &lt;img src=x onerror=alert('xss')&gt;
+ * - javascript:alert('xss') → javascript:alert('xss') (safe as text)
+ * - " onclick="alert('xss') → &quot; onclick=&quot;alert('xss')
  */
 export function sanitizeText(text: string): string {
+    if (!text) return '';
+
+    // HTML entity encoding map for XSS prevention
+    const htmlEntities: Record<string, string> = {
+        '&': '&amp;',   // Must be first to avoid double-encoding
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#x27;',  // More compatible than &apos;
+        '/': '&#x2F;',  // Prevents closing tags
+        '`': '&#x60;',  // Template literals
+    };
+
     return text
-        .replace(/<[^>]*>/g, '')  // Remove HTML tags
-        .replace(/[<>]/g, '')      // Remove any remaining angle brackets
+        .replace(/[&<>"'`/]/g, char => htmlEntities[char] || char)
+        .trim();
+}
+
+/**
+ * Sanitizes text for safe display - strips dangerous content but keeps readable text
+ * Use this when you want to display user content but not as HTML
+ */
+export function sanitizeForDisplay(text: string): string {
+    if (!text) return '';
+
+    return text
+        // Remove all HTML tags
+        .replace(/<[^>]*>/g, '')
+        // Remove javascript: URLs
+        .replace(/javascript:/gi, '')
+        // Remove event handlers like onclick, onerror, etc.
+        .replace(/on\w+\s*=/gi, '')
+        // Remove data: URLs (can contain scripts)
+        .replace(/data:/gi, '')
+        // Normalize whitespace
+        .replace(/\s+/g, ' ')
         .trim();
 }
 

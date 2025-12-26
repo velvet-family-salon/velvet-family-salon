@@ -11,8 +11,8 @@ import {
     CheckSquare, Square, Plus, UserPlus, Minus, RefreshCw, ChevronLeft, ChevronRight, Shield,
     Percent, Printer, Download, FileText
 } from 'lucide-react';
-import { getAppointments, updateAppointmentStatus, completeAppointment, getAppointmentServices, updateServiceCompletion, createAppointment, getServices, getStaff, createBill, getBillByAppointment, addServiceToAppointment } from '@/lib/db';
-import { Appointment, AppointmentStatus, AppointmentService, Service, Staff, Bill, BillService } from '@/lib/types';
+import { getAppointments, updateAppointmentStatus, completeAppointment, completeAppointmentWithBill, getAppointmentServices, updateServiceCompletion, createAppointment, getServices, getStaff, createBill, getBillByAppointment, addServiceToAppointment } from '@/lib/db';
+import { Appointment, AppointmentStatus, AppointmentService, Service, Staff, Bill, BillService, AppointmentWithServices } from '@/lib/types';
 import { formatPrice, formatTime, formatDate, getWhatsAppLink, getCallLink, formatDuration } from '@/lib/utils';
 import { useToast } from '@/components/ui/Toast';
 import { AuthGuard } from '@/components/auth/AuthGuard';
@@ -21,10 +21,7 @@ import { usePermissions } from '@/hooks/usePermissions';
 import { AccessDenied } from '@/components/admin/AccessDenied';
 import { BillReceipt, generateWhatsAppReceipt, generateEmailSubject, generateEmailBody } from '@/components/admin/BillReceipt';
 
-// Extended appointment with services
-interface AppointmentWithServices extends Appointment {
-    allServices?: AppointmentService[];
-}
+
 
 export default function AdminBookingsPage() {
     const router = useRouter();
@@ -91,16 +88,7 @@ export default function AdminBookingsPage() {
     async function loadAppointments() {
         setLoading(true);
         const data = await getAppointments();
-
-        // Load services for each appointment
-        const appointmentsWithServices = await Promise.all(
-            data.map(async (apt) => {
-                const services = await getAppointmentServices(apt.id);
-                return { ...apt, allServices: services };
-            })
-        );
-
-        setAppointments(appointmentsWithServices);
+        setAppointments(data);
         setLoading(false);
     }
 
@@ -319,53 +307,35 @@ export default function AdminBookingsPage() {
         const finalAmountNum = parseFloat(finalAmount);
 
         // Only include COMPLETED services in bill
-        const completedServices = selectedAppointment.allServices?.filter(s => s.is_completed) || [];
+        const completedServices = selectedAppointment.allServices?.filter((s: AppointmentService) => s.is_completed) || [];
 
-        // Calculate subtotal from ORIGINAL prices (compare_at_price) of COMPLETED services only
-        const subtotal = completedServices.length > 0
-            ? completedServices.reduce((sum, s) => {
-                const originalPrice = s.service?.compare_at_price || s.service?.price || 0;
-                return sum + originalPrice;
-            }, 0)
-            : selectedAppointment.service?.compare_at_price || selectedAppointment.service?.price || 0;
-
-        const discountAmount = Math.round(subtotal * (discountValue / 100));
-
-        // Create bill data with DISCOUNTED prices of COMPLETED services only
-        const servicesForBill: BillService[] = completedServices.length > 0
-            ? completedServices.map(s => ({
+        // Create services array for bill - include compare_at_price for combo discount display
+        const servicesForBill = completedServices.length > 0
+            ? completedServices.map((s: AppointmentService) => ({
                 name: s.service?.name || 'Service',
-                price: s.service?.price || 0, // This is the discounted price
+                price: s.service?.price || 0,
+                compare_at_price: s.service?.compare_at_price || null, // For combo discount calculation
             }))
             : [{
                 name: selectedAppointment.service?.name || 'Service',
                 price: selectedAppointment.service?.price || 0,
+                compare_at_price: selectedAppointment.service?.compare_at_price || null,
             }];
 
-        // Complete the appointment
-        const success = await completeAppointment(
-            selectedAppointment.id,
-            finalAmountNum,
-            paymentMode,
-            discountValue
-        );
+        // BUG-C1 FIX: Use atomic completion (appointment + bill in single transaction)
+        // If bill creation fails, appointment status is NOT changed - no partial writes
+        const result = await completeAppointmentWithBill({
+            appointmentId: selectedAppointment.id,
+            finalAmount: finalAmountNum,
+            paymentMode: paymentMode,
+            discountPercent: discountValue,
+            services: servicesForBill,
+            staffName: selectedAppointment.staff?.name,
+        });
 
-        if (success) {
-            // Create bill
-            const bill = await createBill({
-                appointment_id: selectedAppointment.id,
-                customer_name: selectedAppointment.user?.name || 'Walk-In Customer',
-                customer_phone: selectedAppointment.user?.phone || undefined,
-                customer_email: selectedAppointment.user?.email || undefined,
-                services: servicesForBill,
-                subtotal: subtotal, // Original prices total
-                discount_percent: discountValue,
-                discount_amount: discountAmount,
-                final_amount: finalAmountNum,
-                payment_mode: paymentMode,
-                staff_name: selectedAppointment.staff?.name || undefined,
-            });
+        setCompleting(false);
 
+        if (result.success) {
             setAppointments(appointments.map(apt =>
                 apt.id === selectedAppointment.id
                     ? { ...apt, status: 'completed', final_amount: finalAmountNum, discount_percent: discountValue, payment_mode: paymentMode }
@@ -373,27 +343,28 @@ export default function AdminBookingsPage() {
             ));
 
             setShowCompleteModal(false);
-            setCompleting(false);
 
-            if (bill) {
-                setCurrentBill(bill);
+            // Fetch the created bill for receipt display
+            const createdBill = await getBillByAppointment(selectedAppointment.id);
+            if (createdBill) {
+                setCurrentBill(createdBill);
                 setShowReceiptModal(true);
-                showToast('success', 'Appointment completed & bill generated!');
-            } else {
-                showToast('success', 'Appointment completed (bill generation failed)');
             }
+
+            showToast('success', result.idempotent
+                ? 'Appointment was already completed'
+                : 'Appointment completed & bill generated!');
 
             setSelectedAppointment(null);
         } else {
-            setCompleting(false);
-            showToast('error', 'Failed to complete appointment');
+            showToast('error', result.error || 'Failed to complete appointment');
         }
     };
 
     // WhatsApp message generators
     const getConfirmationMessage = (apt: AppointmentWithServices) => {
         const servicesText = apt.allServices?.length
-            ? apt.allServices.map(s => s.service?.name).filter(Boolean).join(', ')
+            ? apt.allServices.map((s: AppointmentService) => s.service?.name).filter(Boolean).join(', ')
             : apt.service?.name;
         return `Hi ${apt.user?.name || 'there'} 👋
 
@@ -410,7 +381,7 @@ See you soon! ✨`;
         let servicesText = '';
         if (apt.allServices?.length) {
             servicesText = apt.allServices
-                .map(s => `${s.is_completed ? '✓' : '✗'} ${s.service?.name} - ${formatPrice(s.service?.price || 0)}`)
+                .map((s: AppointmentService) => `${s.is_completed ? '✓' : '✗'} ${s.service?.name} - ${formatPrice(s.service?.price || 0)}`)
                 .join('\n');
         } else {
             servicesText = `✓ ${apt.service?.name} - ${formatPrice(apt.service?.price || 0)}`;
@@ -828,30 +799,57 @@ Hope to see you again! 💇‍♀️`;
 
                                             {/* Show all services or fallback to primary service */}
                                             {apt.allServices && apt.allServices.length > 0 ? (
-                                                apt.allServices.map((svc) => (
-                                                    <div key={svc.id} className="flex items-start gap-3 py-2 border-t border-beige-200 dark:border-velvet-gray first:border-0 first:pt-0">
-                                                        <button
-                                                            onClick={() => handleServiceToggle(apt.id, svc.id, svc.is_completed)}
-                                                            className={`flex-shrink-0 p-1 rounded ${svc.is_completed ? 'text-green-600' : 'text-[var(--muted)]'}`}
-                                                            disabled={apt.status === 'completed'}
-                                                        >
-                                                            {svc.is_completed ? <CheckSquare className="w-5 h-5" /> : <Square className="w-5 h-5" />}
-                                                        </button>
-                                                        <div className="flex-1">
-                                                            <p className={`font-medium ${!svc.is_completed ? 'line-through text-[var(--muted)]' : ''}`}>
-                                                                {svc.service?.name}
-                                                            </p>
-                                                            {!svc.is_completed && svc.cancellation_reason && (
-                                                                <p className="text-xs text-red-600 italic mt-0.5">
-                                                                    {svc.cancellation_reason}
+                                                apt.allServices.map((svc: AppointmentService) => {
+                                                    const hasOffer = svc.service?.compare_at_price && svc.service.compare_at_price > svc.service.price;
+                                                    const savings = hasOffer ? svc.service!.compare_at_price! - svc.service!.price : 0;
+                                                    return (
+                                                        <div key={svc.id} className="flex items-start gap-3 py-2 border-t border-beige-200 dark:border-velvet-gray first:border-0 first:pt-0">
+                                                            <button
+                                                                onClick={() => handleServiceToggle(apt.id, svc.id, svc.is_completed)}
+                                                                className={`flex-shrink-0 p-1 rounded ${svc.is_completed ? 'text-green-600' : 'text-[var(--muted)]'}`}
+                                                                disabled={apt.status === 'completed'}
+                                                            >
+                                                                {svc.is_completed ? <CheckSquare className="w-5 h-5" /> : <Square className="w-5 h-5" />}
+                                                            </button>
+                                                            <div className="flex-1">
+                                                                <p className={`font-medium ${!svc.is_completed ? 'line-through text-[var(--muted)]' : ''}`}>
+                                                                    {svc.service?.name}
+                                                                    {svc.service?.is_combo && (
+                                                                        <span className="ml-1.5 px-1.5 py-0.5 text-[8px] font-bold bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-full">COMBO</span>
+                                                                    )}
                                                                 </p>
-                                                            )}
+                                                                {!svc.is_completed && svc.cancellation_reason && (
+                                                                    <p className="text-xs text-red-600 italic mt-0.5">
+                                                                        {svc.cancellation_reason}
+                                                                    </p>
+                                                                )}
+                                                                {/* Show offer savings if applicable */}
+                                                                {hasOffer && svc.is_completed && (
+                                                                    <p className="text-[10px] text-purple-600 mt-0.5">
+                                                                        ✨ OFFER: Save {formatPrice(savings)}
+                                                                    </p>
+                                                                )}
+                                                            </div>
+                                                            {/* Price display with MRP strikethrough */}
+                                                            <div className="text-right">
+                                                                {hasOffer && svc.is_completed ? (
+                                                                    <>
+                                                                        <span className="text-[11px] text-[var(--muted)] line-through mr-1">
+                                                                            {formatPrice(svc.service!.compare_at_price!)}
+                                                                        </span>
+                                                                        <span className="font-semibold text-green-600">
+                                                                            {formatPrice(svc.service?.price || 0)}
+                                                                        </span>
+                                                                    </>
+                                                                ) : (
+                                                                    <span className={`font-semibold ${!svc.is_completed ? 'line-through text-[var(--muted)]' : 'text-gold'}`}>
+                                                                        {formatPrice(svc.service?.price || 0)}
+                                                                    </span>
+                                                                )}
+                                                            </div>
                                                         </div>
-                                                        <span className={`font-semibold ${!svc.is_completed ? 'line-through text-[var(--muted)]' : 'text-gold'}`}>
-                                                            {formatPrice(svc.service?.price || 0)}
-                                                        </span>
-                                                    </div>
-                                                ))
+                                                    );
+                                                })
                                             ) : (
                                                 <div className="flex items-center gap-3">
                                                     <div className="w-10 h-10 rounded-lg bg-gold/10 flex items-center justify-center">
@@ -882,21 +880,21 @@ Hope to see you again! 💇‍♀️`;
                                         {(() => {
                                             // Only include COMPLETED services in total calculation
                                             const completedServices = apt.allServices && apt.allServices.length > 0
-                                                ? apt.allServices.filter(s => s.is_completed)
+                                                ? apt.allServices.filter((s: AppointmentService) => s.is_completed)
                                                 : [];
 
                                             const originalTotal = completedServices.length > 0
-                                                ? completedServices.reduce((sum, s) => sum + (s.service?.price || 0), 0)
+                                                ? completedServices.reduce((sum: number, s: AppointmentService) => sum + (s.service?.price || 0), 0)
                                                 : (apt.allServices && apt.allServices.length === 0 ? apt.service?.price || 0 : 0);
 
                                             // Check if any completed service has combo offer
                                             const hasComboOffer = completedServices.length > 0
-                                                ? completedServices.some(s => s.service?.compare_at_price && s.service.compare_at_price > s.service.price)
+                                                ? completedServices.some((s: AppointmentService) => s.service?.compare_at_price && s.service.compare_at_price > s.service.price)
                                                 : apt.service?.compare_at_price && apt.service.compare_at_price > apt.service.price;
 
                                             // Calculate combo savings from completed services only
                                             const originalPriceTotal = completedServices.length > 0
-                                                ? completedServices.reduce((sum, s) => {
+                                                ? completedServices.reduce((sum: number, s: AppointmentService) => {
                                                     const comparePrice = s.service?.compare_at_price || s.service?.price || 0;
                                                     return sum + comparePrice;
                                                 }, 0)
@@ -912,47 +910,38 @@ Hope to see you again! 💇‍♀️`;
 
                                             return (
                                                 <div className="pt-2 mt-2 border-t border-beige-200 dark:border-velvet-gray space-y-1">
-                                                    {/* Show original price if combo offer exists */}
+                                                    {/* Show MRP total if combo offer exists */}
                                                     {hasComboOffer && (
                                                         <div className="flex justify-between text-sm text-[var(--muted)]">
-                                                            <span>Original Price</span>
+                                                            <span>MRP Total</span>
                                                             <span className="line-through">{formatPrice(originalPriceTotal)}</span>
                                                         </div>
                                                     )}
 
-                                                    {/* Combo Offer Discount */}
+                                                    {/* Offer Savings */}
                                                     {hasComboOffer && (
-                                                        <div className="flex justify-between text-sm">
+                                                        <div className="flex justify-between text-sm text-purple-600">
                                                             <span className="flex items-center gap-1.5">
-                                                                <span className="px-1.5 py-0.5 bg-purple-500/10 text-purple-600 rounded text-[10px] font-bold">COMBO</span>
-                                                                <span className="text-purple-600">Offer ({comboDiscountPercent}%)</span>
+                                                                ✨ Offer Savings
                                                             </span>
-                                                            <span className="text-purple-600 font-medium">-{formatPrice(comboSavings)}</span>
+                                                            <span className="font-medium">-{formatPrice(comboSavings)}</span>
                                                         </div>
                                                     )}
 
-                                                    {/* Subtotal after combo (if combo exists) */}
-                                                    {hasComboOffer && !hasStoreDiscount && (
-                                                        <div className="flex justify-between text-sm font-medium">
-                                                            <span>Subtotal</span>
+                                                    {/* After Offers (if combo exists) */}
+                                                    {hasComboOffer && (
+                                                        <div className="flex justify-between text-sm">
+                                                            <span>{hasStoreDiscount ? 'After Offers' : 'Subtotal'}</span>
                                                             <span>{formatPrice(originalTotal)}</span>
                                                         </div>
                                                     )}
 
                                                     {/* Store Discount */}
                                                     {hasStoreDiscount && (
-                                                        <>
-                                                            {hasComboOffer && (
-                                                                <div className="flex justify-between text-sm text-[var(--muted)]">
-                                                                    <span>After Combo</span>
-                                                                    <span>{formatPrice(originalTotal)}</span>
-                                                                </div>
-                                                            )}
-                                                            <div className="flex justify-between text-sm text-green-600">
-                                                                <span>Store Discount ({apt.discount_percent}%)</span>
-                                                                <span>-{formatPrice(storeSavings)}</span>
-                                                            </div>
-                                                        </>
+                                                        <div className="flex justify-between text-sm text-green-600">
+                                                            <span>Store Discount ({apt.discount_percent}%)</span>
+                                                            <span>-{formatPrice(storeSavings)}</span>
+                                                        </div>
                                                     )}
 
                                                     {/* Final Amount */}
@@ -965,7 +954,7 @@ Hope to see you again! 💇‍♀️`;
                                                     {(hasComboOffer || hasStoreDiscount) && (
                                                         <div className="flex justify-end">
                                                             <span className="text-xs bg-green-500/10 text-green-600 px-2 py-1 rounded-full font-medium">
-                                                                You saved {formatPrice(comboSavings + storeSavings)}!
+                                                                🎉 Total Savings: {formatPrice(comboSavings + storeSavings)}
                                                             </span>
                                                         </div>
                                                     )}
@@ -1139,7 +1128,7 @@ Hope to see you again! 💇‍♀️`;
                                     </p>
                                     {selectedAppointment.allServices && selectedAppointment.allServices.length > 0 ? (
                                         <div className="space-y-1">
-                                            {selectedAppointment.allServices.map(s => (
+                                            {selectedAppointment.allServices.map((s: AppointmentService) => (
                                                 <div key={s.id} className="flex justify-between items-center text-sm py-1 border-b border-beige-200/50 dark:border-velvet-gray/30 last:border-0">
                                                     <div className="flex items-center gap-3">
                                                         <button
@@ -1185,7 +1174,7 @@ Hope to see you again! 💇‍♀️`;
                                         <div>
                                             <p className="text-[10px] uppercase font-bold tracking-widest text-gold mb-1">Total Savings</p>
                                             <p className="text-xl font-bold text-gold">
-                                                ₹{Math.round((selectedAppointment.allServices?.filter(s => s.is_completed).reduce((sum, s) => sum + (s.service?.price || 0), 0) || selectedAppointment.service?.price || 0) * (parseFloat(discountPercent) || 0) / 100)}
+                                                ₹{Math.round((selectedAppointment.allServices?.filter((s: AppointmentService) => s.is_completed).reduce((sum: number, s: AppointmentService) => sum + (s.service?.price || 0), 0) || selectedAppointment.service?.price || 0) * (parseFloat(discountPercent) || 0) / 100)}
                                             </p>
                                         </div>
                                         <div className="text-right">

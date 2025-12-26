@@ -67,7 +67,11 @@ export default function AdminStaffPage() {
         setRefreshing(false);
     };
 
-    const filteredStaff = staff
+    // Non-deleted staff for counts
+    const nonDeletedStaff = staff.filter((member) => !member.is_deleted);
+
+    const filteredStaff = nonDeletedStaff
+        // Apply search filter on non-deleted staff
         .filter((member) => member.name.toLowerCase().includes(searchQuery.toLowerCase()))
         .sort((a, b) => {
             // Sort active first, then by name
@@ -300,10 +304,10 @@ export default function AdminStaffPage() {
                         {/* Summary */}
                         <div className="flex gap-4 mb-6">
                             <div className="bg-gold/10 text-gold px-4 py-2 rounded-xl">
-                                <span className="font-bold">{staff.length}</span> Total Staff
+                                <span className="font-bold">{nonDeletedStaff.length}</span> Total Staff
                             </div>
                             <div className="bg-green-500/10 text-green-600 px-4 py-2 rounded-xl">
-                                <span className="font-bold">{staff.filter(s => s.is_active).length}</span> Available
+                                <span className="font-bold">{nonDeletedStaff.filter(s => s.is_active).length}</span> Available
                             </div>
                         </div>
 

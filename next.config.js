@@ -1,3 +1,5 @@
+const { withSentryConfig } = require("@sentry/nextjs");
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   images: {
@@ -26,4 +28,26 @@ const nextConfig = {
   },
 };
 
-module.exports = nextConfig;
+module.exports = withSentryConfig(nextConfig, {
+  // For all available options, see:
+  // https://www.npmjs.com/package/@sentry/webpack-plugin#options
+
+  org: "velvet-family-salon",
+  project: "javascript-nextjs",
+
+  // Only print logs for uploading source maps in CI
+  silent: !process.env.CI,
+
+  // Upload a larger set of source maps for prettier stack traces (increases build time)
+  widenClientFileUpload: true,
+
+  // Route browser requests to Sentry through a Next.js rewrite to circumvent ad-blockers.
+  tunnelRoute: "/monitoring",
+
+  webpack: {
+    automaticVercelMonitors: true,
+    treeshake: {
+      removeDebugLogging: true,
+    },
+  },
+});

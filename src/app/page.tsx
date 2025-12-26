@@ -43,9 +43,9 @@ export default function HomePage() {
     const [heroImageIndex, setHeroImageIndex] = useState(0);
     const [showInstallBanner, setShowInstallBanner] = useState(true);
 
-    // Auto-slide offers
+    // Auto-slide offers - Bug #6 Fix: Match filter with visible slides
     useEffect(() => {
-        const offersCount = services.filter(s => s.is_combo || (s.compare_at_price && s.compare_at_price > s.price)).length;
+        const offersCount = services.filter(s => (s.is_combo || (s.compare_at_price && s.compare_at_price > s.price)) && s.is_featured).length;
         if (offersCount <= 1) return;
         const interval = setInterval(() => {
             setOfferIndex((prev) => (prev + 1) % offersCount);
@@ -310,7 +310,8 @@ export default function HomePage() {
                     {/* Dots for Offers */}
                     <div className="flex justify-center gap-1.5 mt-4">
                         {services
-                            .filter(s => s.is_combo || (s.compare_at_price && s.compare_at_price > s.price))
+                            // Bug #6 Fix: Match filter with slides (include is_featured check)
+                            .filter(s => (s.is_combo || (s.compare_at_price && s.compare_at_price > s.price)) && s.is_featured)
                             .map((_, i) => (
                                 <button
                                     key={i}

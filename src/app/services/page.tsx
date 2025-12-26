@@ -32,13 +32,20 @@ export default function ServicesPage() {
         loadServices();
     }, []);
 
-    const filteredServices = services.filter((service) => {
-        const matchesCategory = selectedCategory === 'all' ||
-            (selectedCategory === 'combo' ? service.is_combo : service.category === selectedCategory);
-        const matchesSearch = service.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            (service.description?.toLowerCase().includes(searchQuery.toLowerCase()) ?? false);
-        return matchesCategory && matchesSearch;
-    });
+    const filteredServices = services
+        .filter((service) => {
+            const matchesCategory = selectedCategory === 'all' ||
+                (selectedCategory === 'combo' ? service.is_combo : service.category === selectedCategory);
+            const matchesSearch = service.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                (service.description?.toLowerCase().includes(searchQuery.toLowerCase()) ?? false);
+            return matchesCategory && matchesSearch;
+        })
+        // Sort: combos first, then by category and name
+        .sort((a, b) => {
+            if (a.is_combo && !b.is_combo) return -1;
+            if (!a.is_combo && b.is_combo) return 1;
+            return a.name.localeCompare(b.name);
+        });
 
     return (
         <div className="min-h-screen">

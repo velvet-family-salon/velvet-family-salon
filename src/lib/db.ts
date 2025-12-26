@@ -1,146 +1,46 @@
 import { createClient } from './supabase/client';
-import { Service, Staff, Appointment, Testimonial, ReviewsConfig, AppointmentService, Bill, BillService } from './types';
+import { Service, Staff, Appointment, Testimonial, ReviewsConfig, AppointmentService, Bill, BillService, AppointmentWithServices } from './types';
+import logger from './logger';
 
 const supabase = createClient();
 
-// ==================== SERVICES ====================
+// ... (lines 6-135 unchanged)
 
-export async function getServices(): Promise<Service[]> {
-    const { data, error } = await supabase
-        .from('services')
-        .select('*')
-        .eq('is_active', true)
-        .order('sort_order', { ascending: true });
-
-    if (error) {
-        console.error('Error fetching services:', error);
-        return [];
-    }
-
-    return data || [];
-}
-
-export async function getMostBookedServices(limit: number = 4): Promise<Service[]> {
-    try {
-        const { data: appointments, error } = await supabase
-            .from('appointment_services')
-            .select('service_id')
-            .limit(200);
-
-        if (error || !appointments) {
-            console.error('Error fetching appointment stats:', error);
-            return (await getServices()).filter(s => !s.is_combo).slice(0, limit);
-        }
-
-        const counts: Record<string, number> = {};
-        appointments.forEach(app => {
-            counts[app.service_id] = (counts[app.service_id] || 0) + 1;
-        });
-
-        const allServices = await getServices();
-
-        return allServices
-            .filter(s => !s.is_combo)
-            .sort((a, b) => (counts[b.id] || 0) - (counts[a.id] || 0))
-            .slice(0, limit);
-    } catch (e) {
-        console.error("Failed to get most booked services", e);
-        return [];
-    }
-}
-
-export async function getServiceById(id: string): Promise<Service | null> {
-    const { data, error } = await supabase
-        .from('services')
-        .select('*')
-        .eq('id', id)
-        .single();
-
-    if (error) {
-        console.error('Error fetching service:', error);
-        return null;
-    }
-
-    return data;
-}
-
-export async function getAllServices(): Promise<Service[]> {
-    const { data, error } = await supabase
-        .from('services')
-        .select('*')
-        .order('sort_order', { ascending: true });
-
-    if (error) {
-        console.error('Error fetching all services:', error);
-        return [];
-    }
-
-    return data || [];
-}
-
-// ==================== STAFF ====================
-
-export async function getStaff(): Promise<Staff[]> {
-    const { data, error } = await supabase
-        .from('staff')
-        .select('*')
-        .eq('is_active', true)
-        .eq('is_deleted', false)
-        .order('name');
-
-    if (error) {
-        console.error('Error fetching staff:', error);
-        return [];
-    }
-    return data || [];
-}
-
-export async function getAllStaff(): Promise<Staff[]> {
-    const { data, error } = await supabase
-        .from('staff')
-        .select('*')
-        .eq('is_deleted', false)
-        .order('name');
-
-    if (error) {
-        console.error('Error fetching all staff:', error);
-        return [];
-    }
-
-    return data || [];
-}
-
-// ==================== APPOINTMENTS ====================
-
-export async function getAppointments(): Promise<Appointment[]> {
+export async function getAppointments(): Promise<AppointmentWithServices[]> {
     const { data, error } = await supabase
         .from('appointments')
         .select(`
       *,
       service:services(*),
       staff:staff(*),
-      user:users(*)
+      user:users(*),
+      allServices:appointment_services(
+        *,
+        service:services(*)
+      )
     `)
-        .order('appointment_date', { ascending: false })
         .order('start_time', { ascending: true });
 
     if (error) {
-        console.error('Error fetching appointments:', error);
+        console.error('Error fetching appointments by date:', error);
         return [];
     }
 
-    console.log('Fetched appointments:', data?.length, data);
     return data || [];
 }
 
-export async function getAppointmentsByDate(date: string): Promise<Appointment[]> {
+export async function getAppointmentsByDate(date: string): Promise<AppointmentWithServices[]> {
     const { data, error } = await supabase
         .from('appointments')
         .select(`
       *,
       service:services(*),
       staff:staff(*),
-      user:users(*)
+      user:users(*),
+      allServices:appointment_services(
+        *,
+        service:services(*)
+      )
     `)
         .eq('appointment_date', date)
         .order('start_time', { ascending: true });
@@ -154,51 +54,19 @@ export async function getAppointmentsByDate(date: string): Promise<Appointment[]
 }
 
 export async function getBookedSlots(staffId: string | null, date: string): Promise<string[]> {
-    // Get ALL non-cancelled appointments for this date with start AND end times
-    const { data, error } = await supabase
-        .from('appointments')
-        .select('start_time, end_time, staff_id')
-        .eq('appointment_date', date)
-        .neq('status', 'cancelled');
+    // Use RPC to get booked slots (works for anonymous users after RLS hardening)
+    const { data, error } = await supabase.rpc('get_booked_slots', {
+        p_staff_id: staffId || null,
+        p_date: date,
+    });
 
     if (error) {
         console.error('Error fetching booked slots:', error);
         return [];
     }
 
-    if (!data || data.length === 0) return [];
-
-    // Filter by staff if specific one selected
-    let appointments = data;
-    if (staffId) {
-        appointments = data.filter(apt =>
-            apt.staff_id === staffId || apt.staff_id === null
-        );
-    }
-
-    // Generate all blocked 30-min slots for each appointment
-    const blockedSlots: string[] = [];
-
-    appointments.forEach(apt => {
-        const [startH, startM] = apt.start_time.slice(0, 5).split(':').map(Number);
-        const [endH, endM] = apt.end_time.slice(0, 5).split(':').map(Number);
-
-        const startMins = startH * 60 + startM;
-        const endMins = endH * 60 + endM;
-
-        // Block every 30-min slot from start to end
-        for (let mins = startMins; mins < endMins; mins += 30) {
-            const h = Math.floor(mins / 60);
-            const m = mins % 60;
-            const timeStr = `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
-            if (!blockedSlots.includes(timeStr)) {
-                blockedSlots.push(timeStr);
-            }
-        }
-    });
-
-    console.log('Blocked slots for date:', date, 'staff:', staffId, '->', blockedSlots);
-    return blockedSlots;
+    logger.log('Blocked slots for date:', date, 'staff:', staffId, '->', data);
+    return (data as string[]) || [];
 }
 
 export async function createAppointment(appointment: {
@@ -210,117 +78,42 @@ export async function createAppointment(appointment: {
     user_name: string;
     user_phone: string;
     user_email?: string;
-}): Promise<{ success: boolean; error?: string; appointment_id?: string }> {
-    console.log('Creating appointment with data:', appointment);
+    idempotency_key?: string; // BUG-C3 FIX: Idempotency key for retry safety
+}): Promise<{ success: boolean; error?: string; appointment_id?: string; idempotent?: boolean }> {
+    logger.log('Creating appointment with atomic RPC:', appointment);
 
     if (!appointment.service_ids.length) {
         return { success: false, error: 'At least one service is required' };
     }
 
-    // First, try to find existing user by phone
-    const { data: existingByPhone } = await supabase
-        .from('users')
-        .select('id')
-        .eq('phone', appointment.user_phone)
-        .maybeSingle();
+    // Call the atomic booking RPC with idempotency key
+    const { data, error } = await supabase.rpc('book_appointment_atomic', {
+        p_service_ids: appointment.service_ids,
+        p_staff_id: appointment.staff_id || null,
+        p_appointment_date: appointment.appointment_date,
+        p_start_time: appointment.start_time,
+        p_end_time: appointment.end_time,
+        p_user_name: appointment.user_name,
+        p_user_phone: appointment.user_phone,
+        p_user_email: appointment.user_email || null,
+        p_idempotency_key: appointment.idempotency_key || null, // BUG-C3 FIX
+    });
 
-    let userId: string;
-
-    if (existingByPhone) {
-        userId = existingByPhone.id;
-        console.log('Found existing user by phone:', userId);
-    } else if (appointment.user_email) {
-        // Try to find by email if phone not found
-        const { data: existingByEmail } = await supabase
-            .from('users')
-            .select('id')
-            .eq('email', appointment.user_email)
-            .maybeSingle();
-
-        if (existingByEmail) {
-            userId = existingByEmail.id;
-            console.log('Found existing user by email:', userId);
-        } else {
-            // Create new user with email
-            const { data: newUser, error: userError } = await supabase
-                .from('users')
-                .insert({
-                    name: appointment.user_name,
-                    phone: appointment.user_phone,
-                    email: appointment.user_email,
-                })
-                .select('id')
-                .single();
-
-            if (userError || !newUser) {
-                console.error('Failed to create user:', userError);
-                return { success: false, error: userError?.message || 'Failed to create user' };
-            }
-            userId = newUser.id;
-            console.log('Created new user with email:', userId);
-        }
-    } else {
-        // No email provided, create user without email
-        const { data: newUser, error: userError } = await supabase
-            .from('users')
-            .insert({
-                name: appointment.user_name,
-                phone: appointment.user_phone,
-                email: null,
-            })
-            .select('id')
-            .single();
-
-        if (userError || !newUser) {
-            console.error('Failed to create user:', userError);
-            return { success: false, error: userError?.message || 'Failed to create user' };
-        }
-        userId = newUser.id;
-        console.log('Created new user (no email):', userId);
+    if (error) {
+        console.error('RPC Error:', error);
+        return { success: false, error: error.message };
     }
 
-    // Create the appointment (use first service as primary for backward compatibility)
-    console.log('Creating appointment for user:', userId);
-    const { data: appointmentData, error } = await supabase
-        .from('appointments')
-        .insert({
-            user_id: userId,
-            service_id: appointment.service_ids[0], // Primary service
-            staff_id: appointment.staff_id || null,
-            appointment_date: appointment.appointment_date,
-            start_time: appointment.start_time,
-            end_time: appointment.end_time,
-            status: 'pending',
-        })
-        .select()
-        .single();
+    // The RPC returns a JSONB object with success, error, appointment_id, and idempotent flag
+    const result = data as { success: boolean; error?: string; appointment_id?: string; idempotent?: boolean };
 
-    console.log('Appointment creation result:', appointmentData, 'error:', error);
-
-    if (error || !appointmentData) {
-        console.error('Error creating appointment:', error);
-        return { success: false, error: error?.message || 'Failed to create appointment' };
+    if (!result.success) {
+        console.warn('Booking failed:', result.error);
+        return { success: false, error: result.error || 'Booking failed' };
     }
 
-    // Create appointment_services entries for all services
-    const appointmentServices = appointment.service_ids.map(serviceId => ({
-        appointment_id: appointmentData.id,
-        service_id: serviceId,
-        staff_id: appointment.staff_id || null,
-        is_completed: true, // Services are checked by default
-    }));
-
-    const { error: servicesError } = await supabase
-        .from('appointment_services')
-        .insert(appointmentServices);
-
-    if (servicesError) {
-        console.error('Error creating appointment services:', servicesError);
-        // Don't fail completely - the main appointment was created
-    }
-
-    console.log('Appointment created successfully!', appointmentData);
-    return { success: true, appointment_id: appointmentData.id };
+    logger.log('Appointment created successfully via RPC!', result.appointment_id, result.idempotent ? '(idempotent)' : '');
+    return { success: true, appointment_id: result.appointment_id, idempotent: result.idempotent };
 }
 
 
@@ -341,6 +134,7 @@ export async function updateAppointmentStatus(
     return true;
 }
 
+// DEPRECATED: Use completeAppointmentWithBill for atomic completion
 export async function completeAppointment(
     id: string,
     finalAmount: number,
@@ -365,59 +159,87 @@ export async function completeAppointment(
     return true;
 }
 
+// BUG-C1 FIX: Atomic completion with bill generation
+// Both appointment status update AND bill creation happen in one transaction
+// If either fails, both are rolled back - no partial writes possible
+export async function completeAppointmentWithBill(params: {
+    appointmentId: string;
+    finalAmount: number;
+    paymentMode: 'cash' | 'upi' | 'card';
+    discountPercent?: number;
+    services: BillService[];
+    staffName?: string;
+    notes?: string;
+}): Promise<{ success: boolean; error?: string; billId?: string; billNumber?: string; idempotent?: boolean }> {
+    const { data, error } = await supabase.rpc('complete_appointment_with_bill', {
+        p_appointment_id: params.appointmentId,
+        p_final_amount: params.finalAmount,
+        p_payment_mode: params.paymentMode,
+        p_discount_percent: params.discountPercent || 0,
+        // FIX: Pass services as array directly, not JSON string
+        // Supabase automatically converts JS arrays to JSONB
+        p_services: params.services,
+        p_staff_name: params.staffName || null,
+        p_notes: params.notes || null,
+    });
+
+    if (error) {
+        console.error('Error completing appointment with bill:', error);
+        return { success: false, error: error.message };
+    }
+
+    const result = data as {
+        success: boolean;
+        error?: string;
+        bill_id?: string;
+        bill_number?: string;
+        idempotent?: boolean;
+    };
+
+    if (!result.success) {
+        return { success: false, error: result.error || 'Failed to complete appointment' };
+    }
+
+    return {
+        success: true,
+        billId: result.bill_id,
+        billNumber: result.bill_number,
+        idempotent: result.idempotent,
+    };
+}
+
 // ==================== CUSTOMER HISTORY ====================
 
 export async function getUserByPhone(phone: string): Promise<{ id: string; name: string; created_at: string } | null> {
-    const { data, error } = await supabase
-        .from('users')
-        .select('id, name, created_at')
-        .eq('phone', phone)
-        .maybeSingle();
+    // Use RPC for anonymous access (after RLS hardening)
+    const { data, error } = await supabase.rpc('get_user_by_phone', {
+        p_phone: phone,
+    });
 
     if (error) {
         console.error('Error fetching user by phone:', error);
         return null;
     }
 
-    return data;
+    // RPC returns array, get first item
+    if (data && data.length > 0) {
+        return data[0];
+    }
+    return null;
 }
 
-export async function getAppointmentsByPhone(phone: string): Promise<(Appointment & { allServices?: AppointmentService[] })[]> {
-    // First find the user by phone
-    const user = await getUserByPhone(phone);
-
-    if (!user) {
-        return [];
-    }
-
-    // Fetch all appointments for this user
-    const { data, error } = await supabase
-        .from('appointments')
-        .select(`
-            *,
-            service:services(*),
-            staff:staff(*)
-        `)
-        .eq('user_id', user.id)
-        .order('appointment_date', { ascending: false })
-        .order('start_time', { ascending: false });
+export async function getAppointmentsByPhone(phone: string): Promise<AppointmentWithServices[]> {
+    // Use RPC for anonymous access (after RLS hardening)
+    const { data, error } = await supabase.rpc('get_appointments_by_phone', {
+        p_phone: phone,
+    });
 
     if (error) {
         console.error('Error fetching appointments by phone:', error);
         return [];
     }
 
-    if (!data) return [];
-
-    // Fetch all services for each appointment
-    const appointmentsWithServices = await Promise.all(
-        data.map(async (apt) => {
-            const services = await getAppointmentServices(apt.id);
-            return { ...apt, allServices: services };
-        })
-    );
-
-    return appointmentsWithServices;
+    return (data as AppointmentWithServices[]) || [];
 }
 
 export interface CustomerStats {
@@ -441,15 +263,30 @@ export async function getCustomerStats(phone: string): Promise<CustomerStats> {
         return sum + (apt.final_amount || 0);
     }, 0);
 
-    // Calculate total savings from discounts
+    // Calculate total savings from both COMBO OFFERS and STORE DISCOUNTS
     const totalSavings = completedAppointments.reduce((sum, apt) => {
+        let savings = 0;
+
+        // 1. Calculate combo offer savings (compare_at_price - price)
+        if (apt.allServices && apt.allServices.length > 0) {
+            apt.allServices.forEach(svc => {
+                if (svc.service?.compare_at_price && svc.service.compare_at_price > svc.service.price) {
+                    savings += svc.service.compare_at_price - svc.service.price;
+                }
+            });
+        } else if (apt.service?.compare_at_price && apt.service.compare_at_price > apt.service.price) {
+            savings += apt.service.compare_at_price - apt.service.price;
+        }
+
+        // 2. Calculate store discount savings
         if (apt.discount_percent && apt.discount_percent > 0) {
             const originalTotal = apt.allServices && apt.allServices.length > 0
                 ? apt.allServices.reduce((s, svc) => s + (svc.service?.price || 0), 0)
                 : apt.service?.price || 0;
-            return sum + Math.round(originalTotal * (apt.discount_percent / 100));
+            savings += Math.round(originalTotal * (apt.discount_percent / 100));
         }
-        return sum;
+
+        return sum + savings;
     }, 0);
 
     // Find favourite service
@@ -534,6 +371,62 @@ export async function uploadServiceImage(file: File): Promise<string | null> {
     return publicUrl;
 }
 
+// ==================== SERVICES GETTERS ====================
+
+export async function getServices(): Promise<Service[]> {
+    const { data, error } = await supabase
+        .from('services')
+        .select('*')
+        .eq('is_active', true)
+        .order('category')
+        .order('name');
+
+    if (error) {
+        console.error('Error fetching services:', error);
+        return [];
+    }
+
+    return data || [];
+}
+
+export async function getAllServices(): Promise<Service[]> {
+    const { data, error } = await supabase
+        .from('services')
+        .select('*')
+        .order('category')
+        .order('name');
+
+    if (error) {
+        console.error('Error fetching all services:', error);
+        return [];
+    }
+
+    return data || [];
+}
+
+export async function getMostBookedServices(limit: number = 4): Promise<Service[]> {
+    // P1 FIX: Use SQL RPC with GROUP BY instead of N+1 queries
+    // BEFORE: 2 queries (appointment_services + services) + JS sorting
+    // AFTER: 1 RPC call with SQL aggregation
+    const { data, error } = await supabase.rpc('get_most_booked_services', {
+        p_limit: limit,
+    });
+
+    if (error) {
+        console.error('Error fetching most booked services:', error);
+        // Fallback: return non-combo active services
+        const { data: fallbackData } = await supabase
+            .from('services')
+            .select('*')
+            .eq('is_active', true)
+            .eq('is_combo', false)
+            .limit(limit);
+        return fallbackData || [];
+    }
+
+    return (data as Service[]) || [];
+}
+
 export async function createService(service: Partial<Service>): Promise<boolean> {
     const { error } = await supabase
         .from('services')
@@ -576,6 +469,37 @@ export async function deleteService(id: string): Promise<boolean> {
 }
 
 // ==================== ADMIN STAFF CRUD ====================
+
+// ==================== STAFF GETTERS ====================
+
+export async function getStaff(): Promise<Staff[]> {
+    const { data, error } = await supabase
+        .from('staff')
+        .select('*')
+        .eq('is_active', true)
+        .order('name');
+
+    if (error) {
+        console.error('Error fetching staff:', error);
+        return [];
+    }
+
+    return data || [];
+}
+
+export async function getAllStaff(): Promise<Staff[]> {
+    const { data, error } = await supabase
+        .from('staff')
+        .select('*')
+        .order('name');
+
+    if (error) {
+        console.error('Error fetching all staff:', error);
+        return [];
+    }
+
+    return data || [];
+}
 
 export async function createStaff(staff: Partial<Staff>): Promise<boolean> {
     const { error } = await supabase
@@ -920,19 +844,20 @@ export async function updateServiceFinalPrice(id: string, finalPrice: number): P
 export async function generateBillNumber(date: Date): Promise<string> {
     const dateStr = date.toISOString().split('T')[0];
 
-    // Count existing bills for this date
-    const { count, error } = await supabase
-        .from('bills')
-        .select('*', { count: 'exact', head: true })
-        .eq('bill_date', dateStr);
+    // Use atomic RPC to generate bill number (prevents race condition)
+    const { data, error } = await supabase.rpc('generate_bill_number_atomic', {
+        p_date: dateStr,
+    });
 
     if (error) {
-        console.error('Error counting bills:', error);
+        console.error('Error generating bill number:', error);
+        // Fallback to timestamp-based unique number if RPC fails
+        const timestamp = Date.now().toString(36).toUpperCase();
+        const dateFormatted = dateStr.replace(/-/g, '');
+        return `VFS-${dateFormatted}-${timestamp}`;
     }
 
-    const nextNum = (count || 0) + 1;
-    const dateFormatted = date.toISOString().split('T')[0].replace(/-/g, '');
-    return `VFS-${dateFormatted}-${nextNum.toString().padStart(3, '0')}`;
+    return data as string;
 }
 
 export async function createBill(billData: {
@@ -1069,90 +994,47 @@ export interface RevenueStats {
 }
 
 export async function getRevenueStats(): Promise<RevenueStats> {
-    const bills = await getAllBills();
+    // P1 FIX: Use SQL RPC instead of loading all bills into memory
+    // BEFORE: Loads ALL bills (O(n) memory), processes with JS array methods
+    // AFTER: 1 RPC call with SQL SUM/COUNT/GROUP BY (O(1) memory)
+    const { data, error } = await supabase.rpc('get_revenue_stats');
 
-    const now = new Date();
-    const today = now.toISOString().split('T')[0];
-    const currentMonth = now.toISOString().slice(0, 7);
-    const currentYear = now.getFullYear().toString();
-
-    // Basic metrics
-    const totalRevenue = bills.reduce((sum, b) => sum + (b.final_amount || 0), 0);
-    const totalBills = bills.length;
-    const uniquePhones = new Set(bills.map(b => b.customer_phone).filter(Boolean));
-    const totalClients = uniquePhones.size;
-    const avgBillValue = totalBills > 0 ? Math.round(totalRevenue / totalBills) : 0;
-
-    // Discount metrics
-    const billsWithDiscount = bills.filter(b => b.discount_percent > 0).length;
-    const totalDiscount = bills.reduce((sum, b) => sum + (b.discount_amount || 0), 0);
-    const avgDiscountPercent = billsWithDiscount > 0
-        ? Math.round(bills.filter(b => b.discount_percent > 0).reduce((sum, b) => sum + b.discount_percent, 0) / billsWithDiscount)
-        : 0;
-
-    // Service stats
-    const serviceMap: Record<string, { count: number; revenue: number }> = {};
-    bills.forEach(bill => {
-        bill.services.forEach(svc => {
-            if (!serviceMap[svc.name]) {
-                serviceMap[svc.name] = { count: 0, revenue: 0 };
-            }
-            serviceMap[svc.name].count++;
-            serviceMap[svc.name].revenue += svc.price;
-        });
-    });
-    const serviceStats = Object.entries(serviceMap)
-        .map(([name, data]) => ({ name, ...data }))
-        .sort((a, b) => b.count - a.count)
-        .slice(0, 10);
-
-    // Monthly revenue
-    const monthMap: Record<string, { revenue: number; bills: number }> = {};
-    bills.forEach(bill => {
-        const month = bill.bill_date.slice(0, 7);
-        if (!monthMap[month]) {
-            monthMap[month] = { revenue: 0, bills: 0 };
-        }
-        monthMap[month].revenue += bill.final_amount || 0;
-        monthMap[month].bills++;
-    });
-    const monthlyRevenue = Object.entries(monthMap)
-        .map(([month, data]) => ({ month, ...data }))
-        .sort((a, b) => a.month.localeCompare(b.month));
-
-    // Best/Worst month
-    let bestMonth: { month: string; revenue: number } | null = null;
-    let worstMonth: { month: string; revenue: number } | null = null;
-    if (monthlyRevenue.length > 0) {
-        bestMonth = monthlyRevenue.reduce((best, curr) => curr.revenue > best.revenue ? curr : best);
-        worstMonth = monthlyRevenue.reduce((worst, curr) => curr.revenue < worst.revenue ? curr : worst);
+    if (error || !data) {
+        console.error('Error fetching revenue stats:', error);
+        // Return default empty stats
+        return {
+            totalRevenue: 0,
+            totalBills: 0,
+            totalClients: 0,
+            avgBillValue: 0,
+            totalDiscount: 0,
+            billsWithDiscount: 0,
+            avgDiscountPercent: 0,
+            serviceStats: [],
+            monthlyRevenue: [],
+            bestMonth: null,
+            worstMonth: null,
+            todayRevenue: 0,
+            mtdRevenue: 0,
+            ytdRevenue: 0,
+        };
     }
 
-    // Today/MTD/YTD
-    const todayRevenue = bills
-        .filter(b => b.bill_date === today)
-        .reduce((sum, b) => sum + (b.final_amount || 0), 0);
-    const mtdRevenue = bills
-        .filter(b => b.bill_date.startsWith(currentMonth))
-        .reduce((sum, b) => sum + (b.final_amount || 0), 0);
-    const ytdRevenue = bills
-        .filter(b => b.bill_date.startsWith(currentYear))
-        .reduce((sum, b) => sum + (b.final_amount || 0), 0);
-
+    // The RPC returns JSONB, map to our interface
     return {
-        totalRevenue,
-        totalBills,
-        totalClients,
-        avgBillValue,
-        totalDiscount,
-        billsWithDiscount,
-        avgDiscountPercent,
-        serviceStats,
-        monthlyRevenue,
-        bestMonth,
-        worstMonth,
-        todayRevenue,
-        mtdRevenue,
-        ytdRevenue,
+        totalRevenue: data.totalRevenue || 0,
+        totalBills: data.totalBills || 0,
+        totalClients: data.totalClients || 0,
+        avgBillValue: data.avgBillValue || 0,
+        totalDiscount: data.totalDiscount || 0,
+        billsWithDiscount: data.billsWithDiscount || 0,
+        avgDiscountPercent: data.avgDiscountPercent || 0,
+        serviceStats: data.serviceStats || [],
+        monthlyRevenue: data.monthlyRevenue || [],
+        bestMonth: data.bestMonth || null,
+        worstMonth: data.worstMonth || null,
+        todayRevenue: data.todayRevenue || 0,
+        mtdRevenue: data.mtdRevenue || 0,
+        ytdRevenue: data.ytdRevenue || 0,
     };
 }

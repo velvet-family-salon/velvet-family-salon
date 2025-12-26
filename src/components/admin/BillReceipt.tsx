@@ -82,63 +82,112 @@ export const BillReceipt = forwardRef<HTMLDivElement, BillReceiptProps>(
 
                     <div className="border-t border-dashed border-gray-400 my-2"></div>
 
-                    {/* Services */}
+                    {/* Services - Professional Format with MRP & Offer Price */}
                     <div className="mb-3">
                         <div className="font-bold mb-1">SERVICES</div>
-                        {bill.services.map((svc, i) => (
-                            <div key={i} className="flex justify-between">
-                                <span className="flex-1 truncate pr-2">{svc.name}</span>
-                                <span>{formatPrice(svc.price)}</span>
-                            </div>
-                        ))}
+                        {/* Header row */}
+                        <div className="flex justify-between text-[10px] text-gray-500 border-b border-gray-200 pb-1 mb-1">
+                            <span>Item</span>
+                            <span>Amount</span>
+                        </div>
+                        {(Array.isArray(bill.services) ? bill.services : []).map((svc, i) => {
+                            const hasOffer = !!(svc.compare_at_price && svc.compare_at_price > svc.price);
+                            const savings = hasOffer ? (svc.compare_at_price ?? 0) - svc.price : 0;
+                            return (
+                                <div key={i} className="mb-1">
+                                    <div className="flex justify-between items-start">
+                                        <span className="flex-1 truncate pr-2 text-sm">{svc.name}</span>
+                                        <div className="text-right">
+                                            {hasOffer ? (
+                                                <>
+                                                    <span className="text-gray-400 line-through text-[10px] mr-1">
+                                                        {formatPrice(svc.compare_at_price ?? 0)}
+                                                    </span>
+                                                    <span className="text-green-700 font-medium">
+                                                        {formatPrice(svc.price)}
+                                                    </span>
+                                                </>
+                                            ) : (
+                                                <span>{formatPrice(svc.price)}</span>
+                                            )}
+                                        </div>
+                                    </div>
+                                    {/* Show offer savings inline */}
+                                    {hasOffer && (
+                                        <div className="text-right text-[9px] text-purple-600">
+                                            ✨ OFFER: Save {formatPrice(savings)}
+                                        </div>
+                                    )}
+                                </div>
+                            );
+                        })}
                     </div>
 
                     <div className="border-t border-dashed border-gray-400 my-2"></div>
 
-                    {/* Totals */}
+                    {/* Totals - Clean Professional Format */}
                     <div className="mb-3">
-                        <div className="flex justify-between">
-                            <span>Subtotal:</span>
-                            <span>{formatPrice(bill.subtotal)}</span>
-                        </div>
-
-                        {/* Combo Offer Discount - if services have compare_at_price */}
                         {(() => {
-                            // Calculate combo savings if any
-                            const comboSavings = bill.subtotal - bill.services.reduce((sum, s) => sum + s.price, 0);
-                            if (comboSavings > 0) {
-                                return (
-                                    <div className="flex justify-between text-purple-700">
-                                        <span>Combo Offer:</span>
-                                        <span>-{formatPrice(comboSavings)}</span>
+                            const services = Array.isArray(bill.services) ? bill.services : [];
+                            const originalPriceTotal = services.reduce((sum, s) => sum + (s.compare_at_price || s.price), 0);
+                            const actualPriceTotal = services.reduce((sum, s) => sum + s.price, 0);
+                            const comboSavings = originalPriceTotal - actualPriceTotal;
+
+                            return (
+                                <>
+                                    {/* Show MRP total only if there were offers */}
+                                    {comboSavings > 0 && (
+                                        <div className="flex justify-between text-gray-500 text-sm">
+                                            <span>MRP Total:</span>
+                                            <span className="line-through">{formatPrice(originalPriceTotal)}</span>
+                                        </div>
+                                    )}
+
+                                    {/* Offer Savings */}
+                                    {comboSavings > 0 && (
+                                        <div className="flex justify-between text-purple-700 text-sm">
+                                            <span>✨ Offer Savings:</span>
+                                            <span>-{formatPrice(comboSavings)}</span>
+                                        </div>
+                                    )}
+
+                                    {/* Subtotal after offers */}
+                                    <div className="flex justify-between text-sm">
+                                        <span>{comboSavings > 0 ? 'After Offers:' : 'Subtotal:'}</span>
+                                        <span>{formatPrice(actualPriceTotal)}</span>
                                     </div>
-                                );
-                            }
-                            return null;
+                                </>
+                            );
                         })()}
 
                         {/* Store Discount */}
                         {bill.discount_percent > 0 && (
-                            <div className="flex justify-between text-green-700">
+                            <div className="flex justify-between text-green-700 text-sm">
                                 <span>Store Discount ({bill.discount_percent}%):</span>
                                 <span>-{formatPrice(bill.discount_amount)}</span>
                             </div>
                         )}
 
-                        <div className="flex justify-between font-bold text-base mt-1">
+                        <div className="border-t border-gray-300 mt-2 pt-2"></div>
+
+                        {/* Grand Total */}
+                        <div className="flex justify-between font-bold text-lg">
                             <span>TOTAL:</span>
                             <span>{formatPrice(bill.final_amount)}</span>
                         </div>
 
-                        {/* Total Savings Message */}
+                        {/* Total Savings Summary */}
                         {(() => {
-                            const comboSavings = bill.subtotal - bill.services.reduce((sum, s) => sum + s.price, 0);
+                            const services = Array.isArray(bill.services) ? bill.services : [];
+                            const originalPriceTotal = services.reduce((sum, s) => sum + (s.compare_at_price || s.price), 0);
+                            const actualPriceTotal = services.reduce((sum, s) => sum + s.price, 0);
+                            const comboSavings = originalPriceTotal - actualPriceTotal;
                             const totalSavings = comboSavings + bill.discount_amount;
                             if (totalSavings > 0) {
                                 return (
                                     <div className="text-center mt-2 p-2 bg-green-50 border border-green-200 rounded">
                                         <div className="text-green-700 font-bold text-xs">
-                                            🎉 You saved {formatPrice(totalSavings)}!
+                                            🎉 Total Savings: {formatPrice(totalSavings)}
                                         </div>
                                     </div>
                                 );
@@ -147,9 +196,9 @@ export const BillReceipt = forwardRef<HTMLDivElement, BillReceiptProps>(
                         })()}
 
                         {bill.payment_mode && (
-                            <div className="flex justify-between text-gray-600 text-xs mt-1">
+                            <div className="flex justify-between text-gray-600 text-xs mt-2">
                                 <span>Payment Mode:</span>
-                                <span className="uppercase">{bill.payment_mode}</span>
+                                <span className="uppercase font-medium">{bill.payment_mode}</span>
                             </div>
                         )}
                     </div>
@@ -219,7 +268,9 @@ export function generateWhatsAppReceipt(bill: Bill): string {
         return `${dateStr}, ${hour12}:${m.toString().padStart(2, '0')} ${ampm}`;
     };
 
-    const servicesText = bill.services
+    // FIX: Safely handle bill.services - may not be array from JSONB
+    const services = Array.isArray(bill.services) ? bill.services : [];
+    const servicesText = services
         .map((s) => `✂️ ${s.name} - ${formatPrice(s.price)}`)
         .join('\n');
 
@@ -236,8 +287,10 @@ ${servicesText}
 
 Subtotal: ${formatPrice(bill.subtotal)}`;
 
-    // Combo savings
-    const comboSavings = bill.subtotal - bill.services.reduce((sum, s) => sum + s.price, 0);
+    // Combo savings - FIX: Use compare_at_price for accurate calculation
+    const originalPriceTotal = services.reduce((sum, s) => sum + (s.compare_at_price || s.price), 0);
+    const actualPriceTotal = services.reduce((sum, s) => sum + s.price, 0);
+    const comboSavings = originalPriceTotal - actualPriceTotal;
     if (comboSavings > 0) {
         message += `
 🎁 Combo Offer: -${formatPrice(comboSavings)}`;
@@ -285,7 +338,9 @@ export function generateEmailBody(bill: Bill): string {
         });
     };
 
-    const servicesText = bill.services
+    // FIX: Safely handle bill.services
+    const services = Array.isArray(bill.services) ? bill.services : [];
+    const servicesText = services
         .map((s) => `• ${s.name} - ${formatPrice(s.price)}`)
         .join('\n');
 
@@ -303,8 +358,10 @@ ${servicesText}
 
 Subtotal: ${formatPrice(bill.subtotal)}`;
 
-    // Combo savings
-    const comboSavings = bill.subtotal - bill.services.reduce((sum, s) => sum + s.price, 0);
+    // Combo savings - FIX: Use compare_at_price for accurate calculation
+    const originalPriceTotal = services.reduce((sum, s) => sum + (s.compare_at_price || s.price), 0);
+    const actualPriceTotal = services.reduce((sum, s) => sum + s.price, 0);
+    const comboSavings = originalPriceTotal - actualPriceTotal;
     if (comboSavings > 0) {
         body += `
 Combo Offer: -${formatPrice(comboSavings)}`;

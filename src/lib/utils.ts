@@ -65,17 +65,36 @@ export function generateTimeSlots(
     const isToday = selectedDate === today;
     const currentMinutes = now.getHours() * 60 + now.getMinutes();
 
+    // Round up to next 30-min slot (e.g., 10:10 → 10:30, not 11:00)
+    const nextAvailableMinutes = Math.ceil(currentMinutes / 30) * 30;
+
+    // Convert booked slots to minutes for easier overlap checking
+    const bookedMinutes = bookedSlots.map(slot => {
+        const [h, m] = slot.split(':').map(Number);
+        return h * 60 + m;
+    });
+
     for (let mins = startMinutes; mins + durationMinutes <= endMinutes; mins += 30) {
         const hours = Math.floor(mins / 60);
         const minutes = mins % 60;
         const timeStr = `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
 
-        // For today, only show future time slots (at least 30 min from now)
-        const isPastTime = isToday && mins < currentMinutes + 30;
+        // For today, check if slot is at least the next 30-min boundary
+        const isPastTime = isToday && mins < nextAvailableMinutes;
+
+        // Check if ANY 30-min block within the service duration overlaps with a booked slot
+        // E.g., for a 3-hour service starting at 9:00, check 9:00, 9:30, 10:00, 10:30, 11:00, 11:30
+        let hasOverlap = false;
+        for (let checkMins = mins; checkMins < mins + durationMinutes; checkMins += 30) {
+            if (bookedMinutes.includes(checkMins)) {
+                hasOverlap = true;
+                break;
+            }
+        }
 
         slots.push({
             time: timeStr,
-            available: !bookedSlots.includes(timeStr) && !isPastTime,
+            available: !hasOverlap && !isPastTime,
         });
     }
 

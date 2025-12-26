@@ -29,6 +29,7 @@ export interface Staff {
     avatar_url: string | null;
     working_hours: WorkingHours;
     is_active: boolean;
+    is_deleted?: boolean; // Bug #2 Fix: Support soft-delete filtering
     created_at: string;
 }
 
@@ -136,6 +137,7 @@ export interface ReviewsConfig {
 export interface BillService {
     name: string;
     price: number;
+    compare_at_price?: number | null;
 }
 
 export interface Bill {
@@ -156,5 +158,10 @@ export interface Bill {
     staff_name: string | null;
     notes: string | null;
     created_at: string;
+}
+
+// Optimization types
+export interface AppointmentWithServices extends Appointment {
+    allServices?: AppointmentService[];
 }
 

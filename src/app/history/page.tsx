@@ -10,7 +10,7 @@ import {
 import Link from 'next/link';
 import { getAppointmentsByPhone, getUserByPhone, getCustomerStats, CustomerStats } from '@/lib/db';
 import { formatPrice, formatTime, formatDate } from '@/lib/utils';
-import { Appointment, AppointmentStatus, AppointmentService } from '@/lib/types';
+import { Appointment, AppointmentStatus, AppointmentService, AppointmentWithServices } from '@/lib/types';
 
 const statusColors: Record<AppointmentStatus, string> = {
     pending: 'bg-yellow-500/10 text-yellow-600 dark:text-yellow-400 border border-yellow-500/20',
@@ -31,7 +31,7 @@ export default function HistoryPage() {
     const [hasSearched, setHasSearched] = useState(false);
     const [customerName, setCustomerName] = useState<string | null>(null);
     const [memberSince, setMemberSince] = useState<string | null>(null);
-    const [appointments, setAppointments] = useState<(Appointment & { allServices?: AppointmentService[] })[]>([]);
+    const [appointments, setAppointments] = useState<AppointmentWithServices[]>([]);
     const [stats, setStats] = useState<CustomerStats | null>(null);
     const [filter, setFilter] = useState<'upcoming' | 'past'>('upcoming');
 
@@ -456,12 +456,28 @@ function AppointmentCard({ apt, index }: { apt: Appointment & { allServices?: Ap
     const completedServices = apt.allServices && apt.allServices.length > 0
         ? apt.allServices.filter(s => s.is_completed)
         : [];
+
+    // Calculate MRP total (compare_at_price sum)
+    const mrpTotal = completedServices.length > 0
+        ? completedServices.reduce((sum, s) => sum + (s.service?.compare_at_price || s.service?.price || 0), 0)
+        : (services[0]?.service?.compare_at_price || services[0]?.service?.price || 0);
+
+    // Calculate actual service price total
     const originalTotal = completedServices.length > 0
         ? completedServices.reduce((sum, s) => sum + (s.service?.price || 0), 0)
         : (services[0]?.service?.price || 0);
 
-    const hasDiscount = apt.status === 'completed' && apt.discount_percent && apt.discount_percent > 0;
-    const savings = hasDiscount ? Math.round(originalTotal * (apt.discount_percent! / 100)) : 0;
+    // Combo offer savings (MRP - actual price)
+    const comboSavings = mrpTotal - originalTotal;
+    const hasComboOffer = comboSavings > 0;
+
+    // Store discount savings
+    const hasStoreDiscount = apt.status === 'completed' && apt.discount_percent && apt.discount_percent > 0;
+    const storeDiscountSavings = hasStoreDiscount ? Math.round(originalTotal * (apt.discount_percent! / 100)) : 0;
+
+    // Total savings
+    const totalSavings = comboSavings + storeDiscountSavings;
+    const hasSavings = totalSavings > 0;
 
     const firstService = services[0]?.service;
     const isComboAndDiscounted = !hasMultipleServices &&
@@ -539,7 +555,21 @@ function AppointmentCard({ apt, index }: { apt: Appointment & { allServices?: Ap
                                     <div className={`text-xs flex items-center gap-1 ${!svc.is_completed ? "line-through text-[var(--muted)]" : "text-[var(--muted)]"}`}>
                                         <span className={`w-1 h-1 rounded-full ${!svc.is_completed ? 'bg-gray-300' : 'bg-velvet-rose'}`}></span>
                                         {svc.service?.name}
+                                        {/* Show COMBO tag if this service is a combo */}
+                                        {svc.service?.is_combo && (
+                                            <span className="ml-1 px-1 py-0.5 text-[8px] font-bold bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-full">COMBO</span>
+                                        )}
                                     </div>
+                                    {/* Show included services for this combo */}
+                                    {svc.service?.is_combo && svc.service?.included_services && svc.service.included_services.length > 0 && (
+                                        <div className="ml-3 flex flex-wrap gap-1 mt-0.5">
+                                            {svc.service.included_services.map((item: any) => (
+                                                <span key={item.id} className="text-[9px] px-1 py-0.5 rounded-full bg-purple-50 dark:bg-purple-900/20 text-purple-700 dark:text-purple-300 border border-purple-100 dark:border-purple-800/50">
+                                                    + {item.name}
+                                                </span>
+                                            ))}
+                                        </div>
+                                    )}
                                     <RenderCancellationReason svc={svc} />
                                 </div>
                             ))}
@@ -577,36 +607,46 @@ function AppointmentCard({ apt, index }: { apt: Appointment & { allServices?: Ap
 
                     {/* Footer with Price and Actions */}
                     <div className="mt-3 pt-3 border-t border-[var(--card-border)]">
-                        {/* Discount info for completed appointments */}
-                        {hasDiscount ? (
+                        {/* Professional pricing breakdown for completed appointments */}
+                        {apt.status === 'completed' && hasSavings ? (
                             <div className="space-y-1 mb-2 text-sm">
-                                <div className="flex justify-between text-[var(--muted)]">
-                                    <span>Subtotal</span>
-                                    <span>{formatPrice(originalTotal)}</span>
-                                </div>
-                                <div className="flex justify-between text-green-600 font-medium">
-                                    <span>💰 You Saved ({apt.discount_percent}%)</span>
-                                    <span>-{formatPrice(savings)}</span>
-                                </div>
-                            </div>
-                        ) : null}
+                                {/* MRP Total (only if combo offer exists) */}
+                                {hasComboOffer && (
+                                    <div className="flex justify-between text-[var(--muted)]">
+                                        <span>MRP Total</span>
+                                        <span className="line-through">{formatPrice(mrpTotal)}</span>
+                                    </div>
+                                )}
 
-                        {/* Offer details for combo services (even if not completed) */}
-                        {isComboAndDiscounted ? (
-                            <div className="space-y-1 mb-2 text-sm">
-                                <div className="flex items-center gap-2 mb-1">
-                                    <span className="text-[10px] font-bold bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 px-2 py-0.5 rounded-full">
-                                        {Math.round(((firstService.compare_at_price! - firstService.price) / firstService.compare_at_price!) * 100)}% OFF
+                                {/* Offer Savings */}
+                                {hasComboOffer && (
+                                    <div className="flex justify-between text-purple-600">
+                                        <span>✨ Offer Savings</span>
+                                        <span>-{formatPrice(comboSavings)}</span>
+                                    </div>
+                                )}
+
+                                {/* After Offers / Subtotal */}
+                                {(hasComboOffer || hasStoreDiscount) && (
+                                    <div className="flex justify-between text-[var(--muted)]">
+                                        <span>{hasComboOffer ? 'After Offers' : 'Subtotal'}</span>
+                                        <span>{formatPrice(originalTotal)}</span>
+                                    </div>
+                                )}
+
+                                {/* Store Discount */}
+                                {hasStoreDiscount && (
+                                    <div className="flex justify-between text-green-600">
+                                        <span>Store Discount ({apt.discount_percent}%)</span>
+                                        <span>-{formatPrice(storeDiscountSavings)}</span>
+                                    </div>
+                                )}
+
+                                {/* Total Savings Badge */}
+                                <div className="flex justify-end pt-1">
+                                    <span className="text-xs bg-green-500/10 text-green-600 px-2 py-0.5 rounded-full font-medium">
+                                        🎉 Saved {formatPrice(totalSavings)}
                                     </span>
-                                    <span className="text-[10px] text-[var(--muted)]">Special Offer</span>
-                                </div>
-                                <div className="flex justify-between text-[var(--muted)]">
-                                    <span>Original Price</span>
-                                    <span className="line-through">{formatPrice(firstService.compare_at_price!)}</span>
-                                </div>
-                                <div className="flex justify-between text-green-600 font-medium">
-                                    <span>You Save</span>
-                                    <span>-{formatPrice(firstService.compare_at_price! - firstService.price)}</span>
                                 </div>
                             </div>
                         ) : null}

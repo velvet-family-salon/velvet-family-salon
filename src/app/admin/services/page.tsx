@@ -72,7 +72,10 @@ export default function AdminServicesPage() {
 
     const filteredServices = services.filter((service) => {
         const matchesSearch = service.name.toLowerCase().includes(searchQuery.toLowerCase());
-        const matchesCategory = filterCategory === 'all' || service.category === filterCategory;
+        // Bug #1 Fix: 'combo' filter now includes combos AND services with offers
+        const hasOffer = (service.compare_at_price && service.compare_at_price > service.price) || service.is_combo;
+        const matchesCategory = filterCategory === 'all' ||
+            (filterCategory === 'combo' ? hasOffer : service.category === filterCategory);
         return matchesSearch && matchesCategory;
     });
 
@@ -108,7 +111,8 @@ export default function AdminServicesPage() {
             price: '',
             compare_at_price: '',
             duration_minutes: '30',
-            category: isCombo ? 'combo' : 'unisex',
+            // Bug #4 Fix: Default category is 'unisex' for both services and combos
+            category: 'unisex',
             image_url: '',
             is_active: true,
             is_combo: isCombo,
@@ -382,8 +386,14 @@ export default function AdminServicesPage() {
                                                 <h3 className="font-semibold text-sm flex items-center gap-1.5">
                                                     {service.name}
                                                     {service.is_featured && <Sparkles className="w-3 h-3 text-gold fill-gold" />}
+                                                    {/* Bug #7 Fix: Add explicit COMBO tag for combo services */}
+                                                    {service.is_combo && (
+                                                        <span className="px-1.5 py-0.5 bg-gradient-to-r from-purple-500 to-pink-500 text-white text-[9px] font-bold rounded-full">
+                                                            COMBO
+                                                        </span>
+                                                    )}
                                                 </h3>
-                                                <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium capitalize whitespace-nowrap ${service.category === 'combo' ? 'bg-purple-500/10 text-purple-600' :
+                                                <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium capitalize whitespace-nowrap ${service.is_combo ? 'bg-purple-500/10 text-purple-600' :
                                                     service.category === 'men' ? 'bg-blue-500/10 text-blue-600' :
                                                         service.category === 'women' ? 'bg-pink-500/10 text-pink-600' :
                                                             'bg-green-500/10 text-green-600'
@@ -625,6 +635,7 @@ export default function AdminServicesPage() {
                                                     value={formData.offer_end_at}
                                                     onChange={(e) => setFormData({ ...formData, offer_end_at: e.target.value })}
                                                     className="input-field"
+                                                    min={new Date().toISOString().slice(0, 16)} // Bug #5 Fix: Prevent past dates
                                                 />
                                             </div>
                                         </div>

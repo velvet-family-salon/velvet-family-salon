@@ -10,6 +10,7 @@ import { Service, Staff, BookingState } from '@/lib/types';
 import { formatPrice, formatDuration, formatTime, getNextNDays, generateTimeSlots, SALON_CONFIG, getWhatsAppLink } from '@/lib/utils';
 import { ServiceListSkeleton, StaffCarouselSkeleton } from '@/components/ui/Skeleton';
 import { useToast } from '@/components/ui/Toast';
+import { getStorageItem, setStorageItem, STORAGE_KEYS, TTL } from '@/lib/storage';
 
 // Step indicator component
 function StepIndicator({ currentStep }: { currentStep: number }) {
@@ -49,21 +50,17 @@ function BookingContent() {
     const [submitting, setSubmitting] = useState(false);
     const [bookedSlots, setBookedSlots] = useState<string[]>([]);
 
-    // Load saved user details from localStorage
+    // Load saved user details from localStorage with TTL
     const getSavedUserDetails = () => {
         if (typeof window === 'undefined') return { userName: '', userPhone: '', userEmail: '' };
-        try {
-            const saved = localStorage.getItem('velvet_user_details');
-            if (saved) {
-                const parsed = JSON.parse(saved);
-                return {
-                    userName: parsed.userName || '',
-                    userPhone: parsed.userPhone || '',
-                    userEmail: parsed.userEmail || '',
-                };
-            }
-        } catch (e) {
-            console.warn('Failed to load saved user details');
+        // P3 FIX: Use TTL storage helper
+        const saved = getStorageItem<{ userName: string; userPhone: string; userEmail: string }>(STORAGE_KEYS.USER_DETAILS);
+        if (saved) {
+            return {
+                userName: saved.userName || '',
+                userPhone: saved.userPhone || '',
+                userEmail: saved.userEmail || '',
+            };
         }
         return { userName: '', userPhone: '', userEmail: '' };
     };
@@ -79,18 +76,15 @@ function BookingContent() {
     const [selectedCategory, setSelectedCategory] = useState<string>('all');
     const [showConfirmation, setShowConfirmation] = useState(false);
 
-    // Save user details when they change
+    // Save user details when they change (with 30-day TTL)
     useEffect(() => {
         if (booking.userName || booking.userPhone || booking.userEmail) {
-            try {
-                localStorage.setItem('velvet_user_details', JSON.stringify({
-                    userName: booking.userName,
-                    userPhone: booking.userPhone,
-                    userEmail: booking.userEmail,
-                }));
-            } catch (e) {
-                console.warn('Failed to save user details');
-            }
+            // P3 FIX: Use TTL storage helper (expires in 30 days)
+            setStorageItem(STORAGE_KEYS.USER_DETAILS, {
+                userName: booking.userName,
+                userPhone: booking.userPhone,
+                userEmail: booking.userEmail,
+            }, TTL.ONE_MONTH);
         }
     }, [booking.userName, booking.userPhone, booking.userEmail]);
 
@@ -123,19 +117,19 @@ function BookingContent() {
     const totalDuration = booking.services.reduce((sum, s) => sum + s.duration_minutes, 0);
     const totalPrice = booking.services.reduce((sum, s) => sum + s.price, 0);
 
-    // Fetch booked slots when date/staff changes
+    // Fetch booked slots when date/staff changes OR when returning to time step
     useEffect(() => {
         async function loadBookedSlots() {
-            if (booking.date) {
-                // Pass staff id or null (for "Any" stylist)
+            if (booking.date && booking.step === 2) {
+                // Refetch booked slots every time we're on step 2
                 const slots = await getBookedSlots(booking.staff?.id || null, booking.date);
                 setBookedSlots(slots);
-            } else {
+            } else if (!booking.date) {
                 setBookedSlots([]);
             }
         }
         loadBookedSlots();
-    }, [booking.date, booking.staff]);
+    }, [booking.date, booking.staff, booking.step]);
 
     const days = getNextNDays(14);
     const timeSlots = booking.date ? generateTimeSlots(
@@ -185,7 +179,14 @@ function BookingContent() {
 
     const handleBack = () => {
         if (booking.step > 1) {
-            setBooking(prev => ({ ...prev, step: (prev.step - 1) as 1 | 2 | 3 }));
+            // When going back to time selector (step 2), clear the previously selected time
+            // This forces user to pick a fresh slot (especially important after a conflict)
+            const shouldClearTime = booking.step === 3; // Going from confirm back to time selector
+            setBooking(prev => ({
+                ...prev,
+                step: (prev.step - 1) as 1 | 2 | 3,
+                time: shouldClearTime ? null : prev.time
+            }));
             window.scrollTo(0, 0);
         }
     };
@@ -204,6 +205,9 @@ function BookingContent() {
         const endMins = endMinutes % 60;
         const endTime = `${endHours.toString().padStart(2, '0')}:${endMins.toString().padStart(2, '0')}`;
 
+        // BUG-C3 FIX: Generate idempotency key to prevent duplicate bookings on retry
+        const idempotencyKey = crypto.randomUUID();
+
         const result = await createAppointment({
             service_ids: booking.services.map(s => s.id),
             staff_id: booking.staff?.id,
@@ -213,6 +217,7 @@ function BookingContent() {
             user_name: booking.userName,
             user_phone: booking.userPhone,
             user_email: booking.userEmail || undefined,
+            idempotency_key: idempotencyKey, // BUG-C3 FIX
         });
 
         setSubmitting(false);
@@ -420,6 +425,12 @@ function BookingContent() {
                             <div className="space-y-3">
                                 {allServices
                                     .filter(s => selectedCategory === 'all' ? true : s.category === selectedCategory || (s.is_combo && selectedCategory === 'combo'))
+                                    .sort((a, b) => {
+                                        // Combos first, then by name
+                                        if (a.is_combo && !b.is_combo) return -1;
+                                        if (!a.is_combo && b.is_combo) return 1;
+                                        return a.name.localeCompare(b.name);
+                                    })
                                     .map((service) => {
                                         const isSelected = booking.services.some(s => s.id === service.id);
                                         return (

@@ -11,15 +11,12 @@ import {
     RefreshCw, UserPlus, Plus, ExternalLink, Shield, CheckCircle, BarChart3
 } from 'lucide-react';
 import { getAppointmentsByDate, getAllServices, getAllStaff, getAppointmentServices, getTodayRevenue } from '@/lib/db';
-import { Appointment, Service, Staff, AppointmentService } from '@/lib/types';
+import { Appointment, Service, Staff, AppointmentService, AppointmentWithServices } from '@/lib/types';
 import { formatPrice, formatTime } from '@/lib/utils';
 import { AuthGuard } from '@/components/auth/AuthGuard';
 import { useAuth } from '@/context/AuthContext';
 
-// Extended appointment with services
-interface AppointmentWithServices extends Appointment {
-    allServices?: AppointmentService[];
-}
+
 
 export default function AdminDashboard() {
     const router = useRouter();
@@ -39,15 +36,7 @@ export default function AdminDashboard() {
             getTodayRevenue(),
         ]);
 
-        // Load services for each appointment
-        const appointmentsWithServices = await Promise.all(
-            appointments.map(async (apt) => {
-                const allServices = await getAppointmentServices(apt.id);
-                return { ...apt, allServices };
-            })
-        );
-
-        setTodayAppointments(appointmentsWithServices);
+        setTodayAppointments(appointments);
         setServices(servicesData);
         setStaff(staffData);
         setRevenueData(revenue);
