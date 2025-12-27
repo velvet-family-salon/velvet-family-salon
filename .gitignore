@@ -39,7 +39,8 @@ next-env.d.ts
 
 # IDE
 .idea/
-.vscode/
+.vscode/*
+!.vscode/settings.json
 *.swp
 *.swo
 
